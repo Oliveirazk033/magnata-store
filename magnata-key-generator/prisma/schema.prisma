@@ -1,0 +1,64 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "libsql"
+  url       = env("DATABASE_URL")
+}
+
+model Product {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  duration    String
+  credits     Int
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  keys        Key[]
+}
+
+model Key {
+  id          String        @id @default(cuid())
+  code        String        @unique
+  productId   String
+  product     Product       @relation(fields: [productId], references: [id])
+  isSold      Boolean       @default(false)
+  soldAt      DateTime?
+  soldTo      String?
+  createdAt   DateTime      @default(now())
+  transactions Transaction[]
+}
+
+model Transaction {
+  id          String   @id @default(cuid())
+  keyId       String
+  key         Key      @relation(fields: [keyId], references: [id])
+  productName String
+  credits     Int
+  buyerInfo   String
+  createdAt   DateTime @default(now())
+}
+
+model OAuthToken {
+  id           String   @id @default(cuid())
+  discordId    String   @unique
+  accessToken  String
+  refreshToken String
+  expiresAt    DateTime
+  scope        String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model DiscordMember {
+  id           String   @id @default(cuid())
+  discordId    String   @unique
+  username     String
+  discriminator String
+  displayName  String
+  avatar       String?
+  isBot        Boolean  @default(false)
+  joinedAt     DateTime @default(now())
+  lastSeenAt   DateTime @default(now())
+}
