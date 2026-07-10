@@ -83,6 +83,7 @@ export default function Home() {
   const [keys, setKeys] = useState<KeyItem[]>([]);
   const [users, setUsers] = useState<UserData[]>([]);
   const [selectedProductId, setSelectedProductId] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState('');
   const [generateQuantity, setGenerateQuantity] = useState(1);
   const [buyingProductId, setBuyingProductId] = useState<string | null>(null);
   const [deliveredKey, setDeliveredKey] = useState<string | null>(null);
@@ -455,6 +456,8 @@ export default function Home() {
 
   const copyKey = (key: string) => { navigator.clipboard.writeText(key); setCopiedKey(true); setTimeout(() => setCopiedKey(false), 2000); };
   const activeProducts = products.filter((p) => p.isActive);
+  const productCategories = [...new Set(activeProducts.map((p) => p.name))];
+  const categoryProducts = selectedCategory ? activeProducts.filter((p) => p.name === selectedCategory) : [];
   const filteredHistory = historySearch.trim()
     ? userHistory.filter((h) => h.keyCode.toLowerCase().includes(historySearch.toLowerCase()) || h.productName.toLowerCase().includes(historySearch.toLowerCase()))
     : userHistory;
@@ -678,7 +681,7 @@ export default function Home() {
                 <>
                   <div className="flex items-center gap-3 mb-6">
                     <Key className="w-5 h-5 text-white/40" />
-                    <h1 className="text-xl font-bold tracking-wider text-white">Gerar Key</h1>
+                    <h1 className="text-xl font-bold tracking-wider text-white">Gerar Keys</h1>
                   </div>
                   {loadingProducts ? (
                     <div className="glass rounded-xl p-6 space-y-4"><div className="skeleton-shimmer h-5 w-48 rounded-lg" /><div className="skeleton-shimmer h-12 w-full rounded-xl" /><div className="skeleton-shimmer h-12 w-full rounded-xl" /></div>
@@ -692,21 +695,41 @@ export default function Home() {
                     </div>
                   ) : (
                     <div className="glass rounded-xl p-5 space-y-4 max-w-md">
+                      {/* Dropdown 1: Selecionar Produto */}
                       <div>
-                        <label className="text-[11px] uppercase tracking-wider text-white/30 mb-2 block">Selecione o produto</label>
+                        <label className="text-[11px] uppercase tracking-wider text-white/30 mb-2 block">Selecionar Produto</label>
                         <select
-                          value={selectedProductId}
-                          onChange={(e) => { setSelectedProductId(e.target.value); setGenerateQuantity(1); }}
+                          value={selectedCategory}
+                          onChange={(e) => { setSelectedCategory(e.target.value); setSelectedProductId(''); setGenerateQuantity(1); }}
                           className="glass-input w-full rounded-xl px-4 py-3 text-sm text-white bg-transparent"
                         >
-                          <option value="">Escolha...</option>
-                          {activeProducts.map((p) => (
-                            <option key={p.id} value={p.id} disabled={p._count.keys === 0}>
-                              {p.name} — {p.duration} — {p.credits} cr. ({p._count.keys} disp.)
-                            </option>
+                          <option value="">Selecione...</option>
+                          {productCategories.map((cat) => (
+                            <option key={cat} value={cat}>{cat}</option>
                           ))}
                         </select>
                       </div>
+
+                      {/* Dropdown 2: Selecionar Tipo da Key */}
+                      {selectedCategory && (
+                        <div>
+                          <label className="text-[11px] uppercase tracking-wider text-white/30 mb-2 block">Selecionar Tipo da Key</label>
+                          <select
+                            value={selectedProductId}
+                            onChange={(e) => { setSelectedProductId(e.target.value); setGenerateQuantity(1); }}
+                            className="glass-input w-full rounded-xl px-4 py-3 text-sm text-white bg-transparent"
+                          >
+                            <option value="">Selecione</option>
+                            {categoryProducts.map((p) => (
+                              <option key={p.id} value={p.id} disabled={p._count.keys === 0}>
+                                Key {p.duration} ({p.credits} cr.) {p._count.keys === 0 ? '— ESGOTADO' : `— ${p._count.keys} disp.`}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      )}
+
+                      {/* Product details + quantity */}
                       {selectedProductId && (() => {
                         const prod = activeProducts.find((p) => p.id === selectedProductId);
                         if (!prod) return null;
@@ -715,8 +738,6 @@ export default function Home() {
                         return (
                           <div className="space-y-3 px-1">
                             <div className="space-y-2">
-                              <div className="flex justify-between text-xs"><span className="text-white/40">Duracao</span><span className="text-white/80 font-medium">{prod.duration}</span></div>
-                              <div className="flex justify-between text-xs"><span className="text-white/40">Custo por key</span><span className="text-emerald-400 font-semibold">{prod.credits} credito{prod.credits > 1 ? 's' : ''}</span></div>
                               <div className="flex justify-between text-xs"><span className="text-white/40">Estoque</span><span className={prod._count.keys > 0 ? 'text-white/80' : 'text-red-400'}>{prod._count.keys} disponiveis</span></div>
                               <div className="flex justify-between text-xs"><span className="text-white/40">Seus creditos</span><span className={loggedUser.credits >= prod.credits ? 'text-amber-400 font-semibold' : 'text-red-400 font-semibold'}>{loggedUser.credits} cr.</span></div>
                             </div>
@@ -750,7 +771,7 @@ export default function Home() {
                         onClick={() => selectedProductId && handleBuy(selectedProductId, generateQuantity)}
                         className="w-full h-11 rounded-xl bg-white text-black text-xs font-medium tracking-wider hover:bg-white/90 transition-colors disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                       >
-                        {buyingProductId === selectedProductId ? (<><RefreshCw className="w-4 h-4 animate-spin" /> Gerando {generateQuantity > 1 ? `${generateQuantity} keys...` : '...'}</>) : (<><Key className="w-4 h-4" /> GERAR {generateQuantity > 1 ? `${generateQuantity} KEYS` : 'KEY'}</>)}
+                        {buyingProductId === selectedProductId ? (<><RefreshCw className="w-4 h-4 animate-spin" /> Gerando {generateQuantity > 1 ? `${generateQuantity} keys...` : '...'}</>) : (<><Key className="w-4 h-4" /> GERAR {generateQuantity > 1 ? `${generateQuantity} KEYS` : 'KEYS'}</>)}
                       </button>
                     </div>
                   )}
