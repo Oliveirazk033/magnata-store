@@ -13,4 +13,4 @@ export async function GET() {
     DATABASE_URL_PREFIX: dbUrl ? dbUrl.substring(0, 30) + '...' : 'NOT SET',
     NODE_ENV: process.env.NODE_ENV,
   });
-}
+}// trigger rebuild
