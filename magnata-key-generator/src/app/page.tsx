@@ -555,44 +555,50 @@ export default function Home() {
                     <h1 className="text-xl font-bold tracking-wider text-white">Gerar Key</h1>
                   </div>
                   {loadingProducts ? (
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                      {[...Array(3)].map((_, i) => (<div key={i} className="glass rounded-xl p-6 space-y-4"><div className="skeleton-shimmer h-5 w-32 rounded-lg" /><div className="skeleton-shimmer h-4 w-24 rounded-lg" /><div className="skeleton-shimmer h-10 w-full rounded-xl" /></div>))}
-                    </div>
+                    <div className="glass rounded-xl p-6 space-y-4"><div className="skeleton-shimmer h-5 w-48 rounded-lg" /><div className="skeleton-shimmer h-12 w-full rounded-xl" /><div className="skeleton-shimmer h-12 w-full rounded-xl" /></div>
                   ) : activeProducts.length === 0 ? (
                     <div className="glass rounded-xl p-12 text-center"><Package className="w-10 h-10 text-white/10 mx-auto mb-3" /><p className="text-sm text-white/30">Nenhum produto disponivel.</p></div>
+                  ) : !loggedUser ? (
+                    <div className="glass rounded-xl p-12 text-center">
+                      <Lock className="w-10 h-10 text-white/10 mx-auto mb-3" />
+                      <p className="text-sm text-white/30 mb-4">Faca login para gerar keys.</p>
+                      <button onClick={() => setShowUserLogin(true)} className="h-10 px-6 rounded-xl bg-white text-black text-xs font-medium tracking-wider hover:bg-white/90 transition-colors">FAZER LOGIN</button>
+                    </div>
                   ) : (
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                      {activeProducts.map((product, i) => (
-                        <motion.div key={product.id} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05, duration: 0.28, ease: [0.22, 1, 0.36, 1] }} className="glass glass-hover rounded-xl p-5 h-full flex flex-col">
-                          <div className="flex items-start justify-between mb-4">
-                            <div>
-                              <h3 className="text-sm font-semibold text-white">{product.name}</h3>
-                              <p className="text-xs text-white/40 mt-0.5">{product.description || product.duration}</p>
-                            </div>
-                            <Badge className="bg-white/5 text-white/60 border-white/10 text-[10px] hover:bg-white/10"><Coins className="w-3 h-3 mr-1" />{product.credits}</Badge>
+                    <div className="glass rounded-xl p-5 space-y-4 max-w-md">
+                      <div>
+                        <label className="text-[11px] uppercase tracking-wider text-white/30 mb-2 block">Selecione o produto</label>
+                        <select
+                          value={selectedProductId}
+                          onChange={(e) => setSelectedProductId(e.target.value)}
+                          className="glass-input w-full rounded-xl px-4 py-3 text-sm text-white bg-transparent"
+                        >
+                          <option value="">Escolha...</option>
+                          {activeProducts.map((p) => (
+                            <option key={p.id} value={p.id} disabled={p._count.keys === 0}>
+                              {p.name} — {p.duration} — {p.credits} cr. ({p._count.keys} disp.)
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      {selectedProductId && (() => {
+                        const prod = activeProducts.find((p) => p.id === selectedProductId);
+                        if (!prod) return null;
+                        return (
+                          <div className="space-y-2 px-1">
+                            <div className="flex justify-between text-xs"><span className="text-white/40">Custo</span><span className="text-emerald-400 font-semibold">{prod.credits} credito{prod.credits > 1 ? 's' : ''}</span></div>
+                            <div className="flex justify-between text-xs"><span className="text-white/40">Estoque</span><span className={prod._count.keys > 0 ? 'text-white/80' : 'text-red-400'}>{prod._count.keys} disponiveis</span></div>
+                            <div className="flex justify-between text-xs"><span className="text-white/40">Seus creditos</span><span className={loggedUser.credits >= prod.credits ? 'text-amber-400 font-semibold' : 'text-red-400 font-semibold'}>{loggedUser.credits} cr.</span></div>
                           </div>
-                          <div className="space-y-2 flex-1">
-                            <div className="flex justify-between text-xs"><span className="text-white/40">Duracao</span><span className="text-white/80 font-medium">{product.duration}</span></div>
-                            <div className="flex justify-between text-xs"><span className="text-white/40">Custo</span><span className="text-emerald-400 font-semibold">{product.credits} credito{product.credits > 1 ? 's' : ''}</span></div>
-                            <div className="flex justify-between text-xs"><span className="text-white/40">Estoque</span><span className={product._count.keys > 0 ? 'text-white/80' : 'text-red-400'}>{product._count.keys} disponiveis</span></div>
-                          </div>
-                          <div className="mt-4 space-y-2">
-                            {loggedUser && (
-                              <div className="flex justify-between text-xs px-1">
-                                <span className="text-white/40">Seus creditos</span>
-                                <span className={loggedUser.credits >= product.credits ? 'text-amber-400 font-semibold' : 'text-red-400 font-semibold'}>{loggedUser.credits} cr.</span>
-                              </div>
-                            )}
-                            <button
-                              disabled={product._count.keys === 0 || buyingProductId === product.id || (loggedUser && loggedUser.credits < product.credits)}
-                              onClick={() => handleBuy(product.id)}
-                              className="w-full h-9 rounded-xl bg-white text-black text-xs font-medium tracking-wider hover:bg-white/90 transition-colors disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center gap-1.5"
-                            >
-                              {buyingProductId === product.id ? (<><RefreshCw className="w-3.5 h-3.5 animate-spin" /> Gerando...</>) : product._count.keys === 0 ? ('ESGOTADO') : (!loggedUser ? ('FAZER LOGIN') : (loggedUser.credits < product.credits ? ('CREDITOS INSUFICIENTES') : (<><Key className="w-3.5 h-3.5" /> GERAR KEY</>)))}
-                            </button>
-                          </div>
-                        </motion.div>
-                      ))}
+                        );
+                      })()}
+                      <button
+                        disabled={!selectedProductId || buyingProductId === selectedProductId || (() => { const p = activeProducts.find((p) => p.id === selectedProductId); return p ? (p._count.keys === 0 || loggedUser.credits < p.credits) : true; })()}
+                        onClick={() => selectedProductId && handleBuy(selectedProductId)}
+                        className="w-full h-11 rounded-xl bg-white text-black text-xs font-medium tracking-wider hover:bg-white/90 transition-colors disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                      >
+                        {buyingProductId === selectedProductId ? (<><RefreshCw className="w-4 h-4 animate-spin" /> Gerando...</>) : (<><Key className="w-4 h-4" /> GERAR KEY</>)}
+                      </button>
                     </div>
                   )}
                 </>
