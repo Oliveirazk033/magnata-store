@@ -90,7 +90,7 @@ export default function Home() {
   const [editCredits, setEditCredits] = useState('');
 
   const getUserHeaders = () => loggedUser ? ({ 'x-user-id': loggedUser.id }) : {};
-  const getAdminHeaders = () => ({ 'x-admin-key': '' });
+  const getAdminHeaders = () => ({ 'x-admin-key': adminPassword });
 
   const fetchProducts = useCallback(async () => {
     setLoadingProducts(true);

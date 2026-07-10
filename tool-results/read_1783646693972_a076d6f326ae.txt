@@ -1,0 +1,643 @@
+     1→     1→'use client';
+     2→     2→
+     3→     3→import { useState, useEffect, useCallback } from 'react';
+     4→     4→import { motion, AnimatePresence } from 'framer-motion';
+     5→     5→import { Button } from '@/components/ui/button';
+     6→     6→import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+     7→     7→import { Badge } from '@/components/ui/badge';
+     8→     8→import { Input } from '@/components/ui/input';
+     9→     9→import { Textarea } from '@/components/ui/textarea';
+    10→    10→import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+    11→    11→import { Separator } from '@/components/ui/separator';
+    12→    12→import { Skeleton } from '@/components/ui/skeleton';
+    13→    13→import {
+    14→    14→  Dialog,
+    15→    15→  DialogContent,
+    16→    16→  DialogDescription,
+    17→    17→  DialogHeader,
+    18→    18→  DialogTitle,
+    19→    19→} from '@/components/ui/dialog';
+    20→    20→import { toast } from 'sonner';
+    21→    21→import Starfield from '@/components/Starfield';
+    22→    22→import {
+    23→    23→  Key, Shield, Plus, Trash2, RefreshCw, Coins, ArrowRight,
+    24→    24→  Lock, Unlock, History, Copy, Check, Store, BarChart3,
+    25→    25→  Package, BookOpen, X, LayoutDashboard, Hash, User, UserPlus, LogIn, LogOut, Wallet,
+    26→    26→} from 'lucide-react';
+    27→    27→
+    28→    28→/* ===== Types ===== */
+    29→    29→interface Product {
+    30→    30→  id: string; name: string; description: string | null;
+    31→    31→  duration: string; credits: number; isActive: boolean;
+    32→    32→  _count: { keys: number };
+    33→    33→}
+    34→    34→interface TransactionItem {
+    35→    35→  id: string; key: { code: string }; productName: string;
+    36→    36→  credits: number; buyerInfo: string; createdAt: string;
+    37→    37→}
+    38→    38→interface KeyItem {
+    39→    39→  id: string; code: string; productId: string;
+    40→    40→  product: { name: string; duration: string };
+    41→    41→  isSold: boolean; soldTo: string | null; soldAt: string | null; createdAt: string;
+    42→    42→}
+    43→    43→interface UserData {
+    44→    44→  id: string; username: string; displayName: string;
+    45→    45→  credits: number; isActive: boolean; createdAt: string;
+    46→    46→}
+    47→    47→interface LoggedUser {
+    48→    48→  id: string; username: string; displayName: string; credits: number;
+    49→    49→}
+    50→    50→
+    51→    51→/* ===== Main ===== */
+    52→    52→export default function Home() {
+    53→    53→  // Auth states
+    54→    54→  const [isAdmin, setIsAdmin] = useState(false);
+    55→    55→  const [adminPassword, setAdminPassword] = useState('');
+    56→    56→  const [loggingIn, setLoggingIn] = useState(false);
+    57→    57→  const [showAdminLogin, setShowAdminLogin] = useState(false);
+    58→    58→
+    59→    59→  // User states
+    60→    60→  const [loggedUser, setLoggedUser] = useState<LoggedUser | null>(null);
+    61→    61→  const [showUserLogin, setShowUserLogin] = useState(false);
+    62→    62→  const [loginUsername, setLoginUsername] = useState('');
+    63→    63→  const [loginPassword, setLoginPassword] = useState('');
+    64→    64→  const [userLoggingIn, setUserLoggingIn] = useState(false);
+    65→    65→
+    66→    66→  // Data states
+    67→    67→  const [products, setProducts] = useState<Product[]>([]);
+    68→    68→  const [loadingProducts, setLoadingProducts] = useState(false);
+    69→    69→  const [transactions, setTransactions] = useState<TransactionItem[]>([]);
+    70→    70→  const [stats, setStats] = useState({ totalCredits: 0, totalSales: 0 });
+    71→    71→  const [keys, setKeys] = useState<KeyItem[]>([]);
+    72→    72→  const [users, setUsers] = useState<UserData[]>([]);
+    73→    73→  const [selectedProductId, setSelectedProductId] = useState('');
+    74→    74→  const [buyingProductId, setBuyingProductId] = useState<string | null>(null);
+    75→    75→  const [deliveredKey, setDeliveredKey] = useState<string | null>(null);
+    76→    76→  const [deliveredProduct, setDeliveredProduct] = useState('');
+    77→    77→  const [remainingCredits, setRemainingCredits] = useState(0);
+    78→    78→
+    79→    79→  // Admin form states
+    80→    80→  const [newProduct, setNewProduct] = useState({ name: '', description: '', duration: '', credits: '' });
+    81→    81→  const [newKeysText, setNewKeysText] = useState('');
+    82→    82→  const [addingKeysTo, setAddingKeysTo] = useState('');
+    83→    83→  const [copiedKey, setCopiedKey] = useState(false);
+    84→    84→  const [adminTab, setAdminTab] = useState('products');
+    85→    85→  const [sidebarOpen, setSidebarOpen] = useState(false);
+    86→    86→
+    87→    87→  // User management
+    88→    88→  const [newUser, setNewUser] = useState({ username: '', password: '', displayName: '', credits: '10' });
+    89→    89→  const [editingUser, setEditingUser] = useState<string | null>(null);
+    90→    90→  const [editCredits, setEditCredits] = useState('');
+    91→    91→
+    92→    92→  const getUserHeaders = () => loggedUser ? ({ 'x-user-id': loggedUser.id }) : {};
+    93→    93→  const getAdminHeaders = () => ({ 'x-admin-key': '' });
+    94→    94→
+    95→    95→  const fetchProducts = useCallback(async () => {
+    96→    96→    setLoadingProducts(true);
+    97→    97→    try {
+    98→    98→      const res = await fetch('/api/products');
+    99→    99→      const data = await res.json();
+   100→   100→      if (data.products) setProducts(data.products);
+   101→   101→    } catch { toast.error('Erro ao carregar produtos'); }
+   102→   102→    finally { setLoadingProducts(false); }
+   103→   103→  }, []);
+   104→   104→
+   105→   105→  const fetchTransactions = useCallback(async () => {
+   106→   106→    try {
+   107→   107→      const res = await fetch('/api/transactions', { headers: getAdminHeaders() });
+   108→   108→      const data = await res.json();
+   109→   109→      if (data.transactions) { setTransactions(data.transactions); setStats({ totalCredits: data.totalCredits, totalSales: data.totalSales }); }
+   110→   110→    } catch { /* silent */ }
+   111→   111→  }, []);
+   112→   112→
+   113→   113→  const fetchKeys = useCallback(async (productId?: string) => {
+   114→   114→    try {
+   115→   115→      const url = productId ? `/api/keys?productId=${productId}` : '/api/keys';
+   116→   116→      const res = await fetch(url, { headers: getAdminHeaders() });
+   117→   117→      const data = await res.json();
+   118→   118→      if (data.keys) setKeys(data.keys);
+   119→   119→    } catch { /* silent */ }
+   120→   120→  }, []);
+   121→   121→
+   122→   122→  const fetchUsers = useCallback(async () => {
+   123→   123→    try {
+   124→   124→      const res = await fetch('/api/auth/register', { headers: getAdminHeaders() });
+   125→   125→      const data = await res.json();
+   126→   126→      if (data.users) setUsers(data.users);
+   127→   127→    } catch { /* silent */ }
+   128→   128→  }, []);
+   129→   129→
+   130→   130→  useEffect(() => { fetchProducts(); }, [fetchProducts]);
+   131→   131→  useEffect(() => {
+   132→   132→    if (isAdmin) { fetchTransactions(); fetchKeys(); fetchUsers(); }
+   133→   133→  }, [isAdmin, fetchTransactions, fetchKeys, fetchUsers]);
+   134→   134→
+   135→   135→  // Refresh user credits after login
+   136→   136→  const refreshUser = async () => {
+   137→   137→    if (!loggedUser) return;
+   138→   138→    try {
+   139→   139→      const res = await fetch('/api/auth/login', { headers: { 'x-user-id': loggedUser.id } });
+   140→   140→      const data = await res.json();
+   141→   141→      if (data.user) setLoggedUser(data.user);
+   142→   142→    } catch { /* silent */ }
+   143→   143→  };
+   144→   144→
+   145→   145→  // === HANDLERS ===
+   146→   146→  const handleAdminLogin = async () => {
+   147→   147→    setLoggingIn(true);
+   148→   148→    try {
+   149→   149→      const res = await fetch('/api/admin/auth', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password: adminPassword }) });
+   150→   150→      const data = await res.json();
+   151→   151→      if (data.success) { setIsAdmin(true); setShowAdminLogin(false); toast.success('Login admin realizado'); }
+   152→   152→      else toast.error('Senha incorreta');
+   153→   153→    } catch { toast.error('Erro ao fazer login'); }
+   154→   154→    finally { setLoggingIn(false); }
+   155→   155→  };
+   156→   156→
+   157→   157→  const handleUserLogin = async () => {
+   158→   158→    if (!loginUsername.trim() || !loginPassword.trim()) { toast.error('Preencha usuário e senha'); return; }
+   159→   159→    setUserLoggingIn(true);
+   160→   160→    try {
+   161→   161→      const res = await fetch('/api/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: loginUsername, password: loginPassword }) });
+   162→   162→      const data = await res.json();
+   163→   163→      if (data.success) {
+   164→   164→        setLoggedUser(data.user);
+   165→   165→        setShowUserLogin(false);
+   166→   166→        setLoginUsername('');
+   167→   167→        setLoginPassword('');
+   168→   168→        toast.success(`Bem-vindo, ${data.user.displayName}!`);
+   169→   169→      } else toast.error(data.error || 'Erro no login');
+   170→   170→    } catch { toast.error('Erro ao fazer login'); }
+   171→   171→    finally { setUserLoggingIn(false); }
+   172→   172→  };
+   173→   173→
+   174→   174→  const handleUserLogout = () => {
+   175→   175→    setLoggedUser(null);
+   176→   176→    setDeliveredKey(null);
+   177→   177→    toast.success('Desconectado');
+   178→   178→  };
+   179→   179→
+   180→   180→  const handleCreateUser = async () => {
+   181→   181→    if (!newUser.username || !newUser.password || !newUser.displayName) { toast.error('Preencha todos os campos'); return; }
+   182→   182→    try {
+   183→   183→      const res = await fetch('/api/auth/register', {
+   184→   184→        method: 'POST', headers: { 'Content-Type': 'application/json', ...getAdminHeaders() },
+   185→   185→        body: JSON.stringify(newUser),
+   186→   186→      });
+   187→   187→      const data = await res.json();
+   188→   188→      if (data.user) {
+   189→   189→        toast.success(`Usuário "${data.user.displayName}" criado com ${data.user.credits} créditos!`);
+   190→   190→        setNewUser({ username: '', password: '', displayName: '', credits: '10' });
+   191→   191→        fetchUsers();
+   192→   192→      } else toast.error(data.error || 'Erro ao criar');
+   193→   193→    } catch { toast.error('Erro'); }
+   194→   194→  };
+   195→   195→
+   196→   196→  const handleUpdateCredits = async (userId: string, credits: number) => {
+   197→   197→    try {
+   198→   198→      const res = await fetch('/api/auth/register', {
+   199→   199→        method: 'PATCH', headers: { 'Content-Type': 'application/json', ...getAdminHeaders() },
+   200→   200→        body: JSON.stringify({ userId, credits }),
+   201→   201→      });
+   202→   202→      const data = await res.json();
+   203→   203→      if (data.user) { toast.success(`Créditos atualizados para ${data.user.credits}`); setEditingUser(null); fetchUsers(); }
+   204→   204→      else toast.error(data.error || 'Erro');
+   205→   205→    } catch { toast.error('Erro'); }
+   206→   206→  };
+   207→   207→
+   208→   208→  const handleDeleteUser = async (userId: string) => {
+   209→   209→    if (!confirm('Deletar este usuário?')) return;
+   210→   210→    try {
+   211→   211→      await fetch(`/api/auth/register?id=${userId}`, { method: 'DELETE', headers: getAdminHeaders() });
+   212→   212→      toast.success('Usuário removido'); fetchUsers();
+   213→   213→    } catch { toast.error('Erro'); }
+   214→   214→  };
+   215→   215→
+   216→   216→  const handleCreateProduct = async () => {
+   217→   217→    if (!newProduct.name || !newProduct.duration || !newProduct.credits) { toast.error('Preencha todos os campos'); return; }
+   218→   218→    try {
+   219→   219→      const res = await fetch('/api/products', { method: 'POST', headers: { 'Content-Type': 'application/json', ...getAdminHeaders() }, body: JSON.stringify(newProduct) });
+   220→   220→      const data = await res.json();
+   221→   221→      if (data.product) { toast.success(`"${data.product.name}" criado!`); setNewProduct({ name: '', description: '', duration: '', credits: '' }); fetchProducts(); }
+   222→   222→      else toast.error(data.error || 'Erro ao criar');
+   223→   223→    } catch { toast.error('Erro'); }
+   224→   224→  };
+   225→   225→
+   226→   226→  const handleAddKeys = async () => {
+   227→   227→    if (!addingKeysTo || !newKeysText.trim()) { toast.error('Selecione produto e cole as keys'); return; }
+   228→   228→    const codes = newKeysText.split('\n').map((l: string) => l.trim()).filter(Boolean);
+   229→   229→    try {
+   230→   230→      const res = await fetch('/api/keys', { method: 'POST', headers: { 'Content-Type': 'application/json', ...getAdminHeaders() }, body: JSON.stringify({ productId: addingKeysTo, codes }) });
+   231→   231→      const data = await res.json();
+   232→   232→      if (data.added > 0) { toast.success(data.message); setNewKeysText(''); fetchProducts(); fetchKeys(addingKeysTo); }
+   233→   233→      else toast.error(data.error || 'Nenhuma key adicionada');
+   234→   234→    } catch { toast.error('Erro'); }
+   235→   235→  };
+   236→   236→
+   237→   237→  const handleDeleteProduct = async (id: string, name: string) => {
+   238→   238→    if (!confirm(`Desativar "${name}"?`)) return;
+   239→   239→    try {
+   240→   240→      await fetch(`/api/products?id=${id}`, { method: 'DELETE', headers: getAdminHeaders() });
+   241→   241→      toast.success('Produto desativado'); fetchProducts();
+   242→   242→    } catch { toast.error('Erro'); }
+   243→   243→  };
+   244→   244→
+   245→   245→  const handleDeleteKey = async (id: string) => {
+   246→   246→    try {
+   247→   247→      const res = await fetch(`/api/keys?id=${id}`, { method: 'DELETE', headers: getAdminHeaders() });
+   248→   248→      const data = await res.json();
+   249→   249→      if (data.success) { toast.success('Key removida'); fetchKeys(selectedProductId || undefined); fetchProducts(); }
+   250→   250→      else toast.error(data.error || 'Erro');
+   251→   251→    } catch { toast.error('Erro'); }
+   252→   252→  };
+   253→   253→
+   254→   254→  const handleBuy = async (productId: string) => {
+   255→   255→    if (!loggedUser) { setShowUserLogin(true); return; }
+   256→   256→    setBuyingProductId(productId); setDeliveredKey(null);
+   257→   257→    try {
+   258→   258→      const res = await fetch('/api/buy', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-user-id': loggedUser.id }, body: JSON.stringify({ productId }) });
+   259→   259→      const data = await res.json();
+   260→   260→      if (data.success) {
+   261→   261→        setDeliveredKey(data.key);
+   262→   262→        setDeliveredProduct(data.product);
+   263→   263→        setRemainingCredits(data.remainingCredits);
+   264→   264→        setLoggedUser({ ...loggedUser, credits: data.remainingCredits });
+   265→   265→        toast.success('Key gerada!'); fetchProducts();
+   266→   266→      } else toast.error(data.error || 'Erro');
+   267→   267→    } catch { toast.error('Erro'); }
+   268→   268→    finally { setBuyingProductId(null); }
+   269→   269→  };
+   270→   270→
+   271→   271→  const copyKey = (key: string) => { navigator.clipboard.writeText(key); setCopiedKey(true); setTimeout(() => setCopiedKey(false), 2000); };
+   272→   272→  const activeProducts = products.filter((p) => p.isActive);
+   273→   273→
+   274→   274→  const navItems = isAdmin
+   275→   275→    ? [
+   276→   276→        { group: 'Principal', items: [{ icon: LayoutDashboard, label: 'Dashboard', tab: 'products' }] },
+   277→   277→        { group: 'Estoque', items: [{ icon: Key, label: 'Produtos & Keys', tab: 'products' }, { icon: Package, label: 'Estoque', tab: 'stock' }, { icon: History, label: 'Historico', tab: 'sales' }] },
+   278→   278→        { group: 'Sistema', items: [{ icon: User, label: 'Usuarios', tab: 'users' }] },
+   279→   279→      ]
+   280→   280→    : [];
+   281→   281→
+   282→   282→  return (
+   283→   283→    <div className="min-h-screen flex flex-col bg-[#0a0a0a] text-white relative">
+   284→   284→      <Starfield />
+   285→   285→
+   286→   286→      {/* Sidebar */}
+   287→   287→      <AnimatePresence>
+   288→   288→        {sidebarOpen && (
+   289→   289→          <>
+   290→   290→            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40" onClick={() => setSidebarOpen(false)} />
+   291→   291→            <motion.nav
+   292→   292→              initial={{ x: -280 }} animate={{ x: 0 }} exit={{ x: -280 }}
+   293→   293→              transition={{ type: 'spring', damping: 28, stiffness: 300 }}
+   294→   294→              className="fixed left-0 top-0 bottom-0 w-[260px] z-50 flex flex-col p-4"
+   295→   295→              style={{ background: 'linear-gradient(180deg, rgba(8,8,8,0.78), rgba(4,4,4,0.72))', backdropFilter: 'blur(36px) saturate(180%)', borderRight: '1px solid rgba(255,255,255,0.05)' }}
+   296→   296→            >
+   297→   297→              <div className="flex items-center justify-between mb-6 px-2">
+   298→   298→                <div className="flex items-center gap-3">
+   299→   299→                  <div className="w-8 h-8 rounded-lg bg-white/5 flex items-center justify-center"><Key className="w-4 h-4 text-white/60" /></div>
+   300→   300→                  <span className="text-sm font-semibold tracking-wider text-white">MAGNATA</span>
+   301→   301→                </div>
+   302→   302→                <button onClick={() => setSidebarOpen(false)} className="text-white/30 hover:text-white/60 transition-colors"><X className="w-4 h-4" /></button>
+   303→   303→              </div>
+   304→   304→              <div className="flex-1 space-y-6 overflow-y-auto custom-scrollbar">
+   305→   305→                {navItems.map((g) => (
+   306→   306→                  <div key={g.group}>
+   307→   307→                    <p className="text-[10px] uppercase tracking-wider text-white/25 px-2 mb-2">{g.group}</p>
+   308→   308→                    <div className="space-y-1">
+   309→   309→                      {g.items.map((item) => (
+   310→   310→                        <button key={item.tab} onClick={() => { setAdminTab(item.tab); setSidebarOpen(false); }}
+   311→   311→                          className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors ${adminTab === item.tab ? 'bg-white/10 text-white' : 'text-white/50 hover:bg-white/5 hover:text-white/80'}`}>
+   312→   312→                          <item.icon className="w-4 h-4" />{item.label}
+   313→   313→                        </button>
+   314→   314→                      ))}
+   315→   315→                    </div>
+   316→   316→                  </div>
+   317→   317→                ))}
+   318→   318→              </div>
+   319→   319→              <Separator className="bg-white/5 my-4" />
+   320→   320→              <button onClick={() => { setIsAdmin(false); setSidebarOpen(false); }} className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-white/50 hover:bg-white/5 hover:text-white/80 transition-colors">
+   321→   321→                <Store className="w-4 h-4" />Ver Loja
+   322→   322→              </button>
+   323→   323→            </motion.nav>
+   324→   324→          </>
+   325→   325→        )}
+   326→   326→      </AnimatePresence>
+   327→   327→
+   328→   328→      {/* Header */}
+   329→   329→      <header className="glass-nav h-14 sticky top-0 z-30 flex items-center justify-between px-4">
+   330→   330→        <div className="flex items-center gap-3">
+   331→   331→          {isAdmin && (
+   332→   332→            <button onClick={() => setSidebarOpen(true)} className="text-white/50 hover:text-white/80 transition-colors">
+   333→   333→              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="3" y1="6" x2="21" y2="6" /><line x1="3" y1="12" x2="21" y2="12" /><line x1="3" y1="18" x2="21" y2="18" /></svg>
+   334→   334→            </button>
+   335→   335→          )}
+   336→   336→          <div className="flex items-center gap-2.5">
+   337→   337→            <div className="w-7 h-7 rounded-lg bg-white/5 flex items-center justify-center border border-white/10"><Key className="w-3.5 h-3.5 text-white/60" /></div>
+   338→   338→            <span className="text-sm font-bold tracking-wider text-white/90">MAGNATA</span>
+   339→   339→          </div>
+   340→   340→        </div>
+   341→   341→        <div className="flex items-center gap-2">
+   342→   342→          {isAdmin ? (
+   343→   343→            <>
+   344→   344→              <Button variant="ghost" size="sm" onClick={() => setIsAdmin(false)} className="text-white/50 hover:text-white/80 hover:bg-white/5 text-xs tracking-wider"><Store className="w-4 h-4 mr-1.5" />LOJA</Button>
+   345→   345→              <Button variant="ghost" size="sm" onClick={() => { setIsAdmin(false); }} className="text-white/50 hover:text-white/80 hover:bg-white/5 text-xs tracking-wider"><LogOut className="w-4 h-4 mr-1.5" />SAIR</Button>
+   346→   346→            </>
+   347→   347→          ) : loggedUser ? (
+   348→   348→            <div className="flex items-center gap-3">
+   349→   349→              <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white/5">
+   350→   350→                <Wallet className="w-3.5 h-3.5 text-amber-400" />
+   351→   351→                <span className="text-xs font-semibold text-amber-400">{loggedUser.credits}</span>
+   352→   352→                <span className="text-[10px] text-white/30">créditos</span>
+   353→   353→              </div>
+   354→   354→              <span className="text-xs text-white/60 hidden sm:inline">{loggedUser.displayName}</span>
+   355→   355→              <Button variant="ghost" size="sm" onClick={handleUserLogout} className="text-white/50 hover:text-red-400 hover:bg-white/5 text-xs"><LogOut className="w-4 h-4" /></Button>
+   356→   356→            </div>
+   357→   357→          ) : (
+   358→   358→            <>
+   359→   359→              <Button variant="ghost" size="sm" onClick={() => setShowUserLogin(true)} className="text-white/50 hover:text-white/80 hover:bg-white/5 text-xs tracking-wider"><LogIn className="w-4 h-4 mr-1.5" />LOGIN</Button>
+   360→   360→              <Button variant="ghost" size="sm" onClick={() => setShowAdminLogin(true)} className="text-white/50 hover:text-white/80 hover:bg-white/5 text-xs tracking-wider"><Lock className="w-4 h-4 mr-1.5" />ADMIN</Button>
+   361→   361→            </>
+   362→   362→          )}
+   363→   363→        </div>
+   364→   364→      </header>
+   365→   365→
+   366→   366→      {/* Main */}
+   367→   367→      <main className="flex-1 relative z-10 max-w-7xl mx-auto w-full p-4 md:p-6">
+   368→   368→        <AnimatePresence mode="wait">
+   369→   369→          {!isAdmin ? (
+   370→   370→            /* ====== STORE VIEW ====== */
+   371→   371→            <motion.div key="store" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -12 }} transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}>
+   372→   372→              {deliveredKey ? (
+   373→   373→                <div className="max-w-lg mx-auto mt-8">
+   374→   374→                  <div className="glass-strong rounded-xl p-8 text-center space-y-5">
+   375→   375→                    <motion.div initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={{ delay: 0.1 }}>
+   376→   376→                      <div className="w-16 h-16 rounded-2xl bg-emerald-500/10 flex items-center justify-center mx-auto mb-4"><Shield className="w-8 h-8 text-emerald-400" /></div>
+   377→   377→                      <h2 className="text-lg font-bold tracking-wider text-white">Key Gerada</h2>
+   378→   378→                      <p className="text-sm text-white/50 mt-1">{deliveredProduct}</p>
+   379→   379→                    </motion.div>
+   380→   380→                    <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.25 }}>
+   381→   381→                      <div className="glass-input rounded-xl p-4 flex items-center justify-between gap-3">
+   382→   382→                        <code className="text-emerald-400 font-mono text-sm break-all text-left">{deliveredKey}</code>
+   383→   383→                        <Button size="sm" variant="ghost" onClick={() => copyKey(deliveredKey)} className="text-white/30 hover:text-white/60 shrink-0">
+   384→   384→                          {copiedKey ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
+   385→   385→                        </Button>
+   386→   386→                      </div>
+   387→   387→                      <p className="text-[11px] text-white/20 mt-3">Copie sua key agora. Ela nao sera exibida novamente.</p>
+   388→   388→                      <p className="text-[11px] text-amber-400/60 mt-1">Créditos restantes: {remainingCredits}</p>
+   389→   389→                    </motion.div>
+   390→   390→                    <Button variant="ghost" onClick={() => { setDeliveredKey(null); refreshUser(); }} className="text-white/40 hover:text-white/70 hover:bg-white/5 text-xs tracking-wider">COMPRAR OUTRA</Button>
+   391→   391→                  </div>
+   392→   392→                </div>
+   393→   393→              ) : (
+   394→   394→                <>
+   395→   395→                  <div className="flex items-center gap-3 mb-6">
+   396→   396→                    <Key className="w-5 h-5 text-white/40" />
+   397→   397→                    <h1 className="text-xl font-bold tracking-wider text-white">Gerar Key</h1>
+   398→   398→                  </div>
+   399→   399→                  {loadingProducts ? (
+   400→   400→                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+   401→   401→                      {[...Array(3)].map((_, i) => (<div key={i} className="glass rounded-xl p-6 space-y-4"><div className="skeleton-shimmer h-5 w-32 rounded-lg" /><div className="skeleton-shimmer h-4 w-24 rounded-lg" /><div className="skeleton-shimmer h-10 w-full rounded-xl" /></div>))}
+   402→   402→                    </div>
+   403→   403→                  ) : activeProducts.length === 0 ? (
+   404→   404→                    <div className="glass rounded-xl p-12 text-center"><Package className="w-10 h-10 text-white/10 mx-auto mb-3" /><p className="text-sm text-white/30">Nenhum produto disponivel.</p></div>
+   405→   405→                  ) : (
+   406→   406→                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+   407→   407→                      {activeProducts.map((product, i) => (
+   408→   408→                        <motion.div key={product.id} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05, duration: 0.28, ease: [0.22, 1, 0.36, 1] }} className="glass glass-hover rounded-xl p-5 h-full flex flex-col">
+   409→   409→                          <div className="flex items-start justify-between mb-4">
+   410→   410→                            <div>
+   411→   411→                              <h3 className="text-sm font-semibold text-white">{product.name}</h3>
+   412→   412→                              <p className="text-xs text-white/40 mt-0.5">{product.description || product.duration}</p>
+   413→   413→                            </div>
+   414→   414→                            <Badge className="bg-white/5 text-white/60 border-white/10 text-[10px] hover:bg-white/10"><Coins className="w-3 h-3 mr-1" />{product.credits}</Badge>
+   415→   415→                          </div>
+   416→   416→                          <div className="space-y-2 flex-1">
+   417→   417→                            <div className="flex justify-between text-xs"><span className="text-white/40">Duracao</span><span className="text-white/80 font-medium">{product.duration}</span></div>
+   418→   418→                            <div className="flex justify-between text-xs"><span className="text-white/40">Custo</span><span className="text-emerald-400 font-semibold">{product.credits} credito{product.credits > 1 ? 's' : ''}</span></div>
+   419→   419→                            <div className="flex justify-between text-xs"><span className="text-white/40">Estoque</span><span className={product._count.keys > 0 ? 'text-white/80' : 'text-red-400'}>{product._count.keys} disponiveis</span></div>
+   420→   420→                          </div>
+   421→   421→                          <div className="mt-4 space-y-2">
+   422→   422→                            {loggedUser && (
+   423→   423→                              <div className="flex justify-between text-xs px-1">
+   424→   424→                                <span className="text-white/40">Seus creditos</span>
+   425→   425→                                <span className={loggedUser.credits >= product.credits ? 'text-amber-400 font-semibold' : 'text-red-400 font-semibold'}>{loggedUser.credits} cr.</span>
+   426→   426→                              </div>
+   427→   427→                            )}
+   428→   428→                            <button
+   429→   429→                              disabled={product._count.keys === 0 || buyingProductId === product.id || (loggedUser && loggedUser.credits < product.credits)}
+   430→   430→                              onClick={() => handleBuy(product.id)}
+   431→   431→                              className="w-full h-9 rounded-xl bg-white text-black text-xs font-medium tracking-wider hover:bg-white/90 transition-colors disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center gap-1.5"
+   432→   432→                            >
+   433→   433→                              {buyingProductId === product.id ? (<><RefreshCw className="w-3.5 h-3.5 animate-spin" /> Gerando...</>) : product._count.keys === 0 ? ('ESGOTADO') : (!loggedUser ? ('FAZER LOGIN') : (loggedUser.credits < product.credits ? ('CREDITOS INSUFICIENTES') : (<><Key className="w-3.5 h-3.5" /> GERAR KEY</>)))}
+   434→   434→                            </button>
+   435→   435→                          </div>
+   436→   436→                        </motion.div>
+   437→   437→                      ))}
+   438→   438→                    </div>
+   439→   439→                  )}
+   440→   440→                </>
+   441→   441→              )}
+   442→   442→            </motion.div>
+   443→   443→          ) : (
+   444→   444→            /* ====== ADMIN VIEW ====== */
+   445→   445→            <motion.div key="admin" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -12 }} transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}>
+   446→   446→              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
+   447→   447→                {[
+   448→   448→                  { label: 'Produtos Ativos', value: activeProducts.length, color: 'text-white' },
+   449→   449→                  { label: 'Keys em Estoque', value: activeProducts.reduce((s, p) => s + p._count.keys, 0), color: 'text-emerald-400' },
+   450→   450→                  { label: 'Vendas Totais', value: stats.totalSales, color: 'text-white' },
+   451→   451→                  { label: 'Usuarios', value: users.length, color: 'text-blue-400' },
+   452→   452→                ].map((s, i) => (
+   453→   453→                  <motion.div key={s.label} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }}>
+   454→   454→                    <div className="glass rounded-xl p-4"><p className="text-[10px] uppercase tracking-wider text-white/30">{s.label}</p><p className={`text-2xl font-bold mt-1 ${s.color}`}>{s.value}</p></div>
+   455→   455→                  </motion.div>
+   456→   456→                ))}
+   457→   457→              </div>
+   458→   458→
+   459→   459→              <Tabs value={adminTab} onValueChange={setAdminTab}>
+   460→   460→                <TabsList className="bg-white/[0.03] border border-white/[0.06] rounded-xl p-1 mb-4 w-full sm:w-auto flex-wrap">
+   461→   461→                  {[
+   462→   462→                    { value: 'products', icon: Key, label: 'Produtos' },
+   463→   463→                    { value: 'stock', icon: Package, label: 'Estoque' },
+   464→   464→                    { value: 'sales', icon: History, label: 'Historico' },
+   465→   465→                    { value: 'users', icon: User, label: 'Usuarios' },
+   466→   466→                  ].map((t) => (
+   467→   467→                    <TabsTrigger key={t.value} value={t.value} className="data-[state=active]:bg-white/10 data-[state=active]:text-white text-white/40 rounded-lg text-xs tracking-wider gap-1.5">
+   468→   468→                      <t.icon className="w-3.5 h-3.5" />{t.label}
+   469→   469→                    </TabsTrigger>
+   470→   470→                  ))}
+   471→   471→                </TabsList>
+   472→   472→
+   473→   473→                {/* Products Tab */}
+   474→   474→                <TabsContent value="products" className="space-y-3 mt-0">
+   475→   475→                  <div className="glass rounded-xl p-5">
+   476→   476→                    <h3 className="text-sm font-semibold tracking-wider text-white mb-4 flex items-center gap-2"><Plus className="w-4 h-4 text-white/40" />Novo Produto</h3>
+   477→   477→                    <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+   478→   478→                      <input placeholder="Nome" value={newProduct.name} onChange={(e) => setNewProduct({ ...newProduct, name: e.target.value })} className="glass-input rounded-xl px-4 py-2.5 text-sm text-white placeholder:text-white/20" />
+   479→   479→                      <input placeholder="Duracao (1 dia)" value={newProduct.duration} onChange={(e) => setNewProduct({ ...newProduct, duration: e.target.value })} className="glass-input rounded-xl px-4 py-2.5 text-sm text-white placeholder:text-white/20" />
+   480→   480→                      <input type="number" placeholder="Creditos" value={newProduct.credits} onChange={(e) => setNewProduct({ ...newProduct, credits: e.target.value })} className="glass-input rounded-xl px-4 py-2.5 text-sm text-white placeholder:text-white/20" />
+   481→   481→                      <button onClick={handleCreateProduct} className="h-10 rounded-xl bg-white text-black text-xs font-medium tracking-wider hover:bg-white/90 transition-colors flex items-center justify-center gap-1.5"><Plus className="w-3.5 h-3.5" />CRIAR</button>
+   482→   482→                    </div>
+   483→   483→                  </div>
+   484→   484→                  <div className="glass rounded-xl p-5">
+   485→   485→                    <h3 className="text-sm font-semibold tracking-wider text-white mb-4">Produtos Cadastrados</h3>
+   486→   486→                    <div className="max-h-80 overflow-y-auto custom-scrollbar space-y-2">
+   487→   487→                      {products.length === 0 ? (<p className="text-sm text-white/30 text-center py-6">Nenhum produto.</p>) : products.map((p) => (
+   488→   488→                        <div key={p.id} className="flex items-center justify-between p-3 rounded-lg bg-white/[0.02] hover:bg-white/[0.04] transition-colors">
+   489→   489→                          <div className="flex-1 min-w-0">
+   490→   490→                            <div className="flex items-center gap-2"><span className="text-sm font-medium text-white truncate">{p.name}</span>{!p.isActive && <Badge className="bg-red-500/10 text-red-400 border-red-500/20 text-[10px]">Inativo</Badge>}</div>
+   491→   491→                            <div className="flex items-center gap-3 mt-1 text-[11px] text-white/40"><span>{p.duration}</span><span className="text-emerald-400">{p.credits} cr.</span><span className={p._count.keys > 0 ? 'text-emerald-400' : 'text-red-400'}>{p._count.keys} keys</span></div>
+   492→   492→                          </div>
+   493→   493→                          <button onClick={() => handleDeleteProduct(p.id, p.name)} className="text-white/20 hover:text-red-400 transition-colors p-1"><Trash2 className="w-4 h-4" /></button>
+   494→   494→                        </div>
+   495→   495→                      ))}
+   496→   496→                    </div>
+   497→   497→                  </div>
+   498→   498→                </TabsContent>
+   499→   499→
+   500→   500→                {/* Stock Tab */}
+   501→   501→                <TabsContent value="stock" className="space-y-3 mt-0">
+   502→   502→                  <div className="glass rounded-xl p-5">
+   503→   503→                    <h3 className="text-sm font-semibold tracking-wider text-white mb-1 flex items-center gap-2"><Plus className="w-4 h-4 text-white/40" />Adicionar Keys</h3>
+   504→   504→                    <p className="text-[11px] text-white/25 mb-4">Cole uma key por linha</p>
+   505→   505→                    <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+   506→   506→                      <select value={addingKeysTo} onChange={(e) => setAddingKeysTo(e.target.value)} className="glass-input rounded-xl px-4 py-2.5 text-sm text-white/80">
+   507→   507→                        <option value="">Selecione...</option>
+   508→   508→                        {products.filter((p) => p.isActive).map((p) => (<option key={p.id} value={p.id}>{p.name} ({p.credits} cr.)</option>))}
+   509→   509→                      </select>
+   510→   510→                      <div className="sm:col-span-2"><Textarea value={newKeysText} onChange={(e) => setNewKeysText(e.target.value)} rows={3} placeholder="Cole as keys aqui..." className="glass-input rounded-xl px-4 py-2.5 text-sm text-white font-mono placeholder:text-white/15 resize-none min-h-[88px]" /></div>
+   511→   511→                      <button onClick={handleAddKeys} disabled={!addingKeysTo || !newKeysText.trim()} className="h-auto rounded-xl bg-white text-black text-xs font-medium tracking-wider hover:bg-white/90 transition-colors disabled:opacity-30 flex items-center justify-center gap-1.5 py-3"><Plus className="w-3.5 h-3.5" />ADICIONAR</button>
+   512→   512→                    </div>
+   513→   513→                  </div>
+   514→   514→                  <div className="glass rounded-xl p-5">
+   515→   515→                    <div className="flex items-center justify-between mb-4">
+   516→   516→                      <h3 className="text-sm font-semibold tracking-wider text-white">Keys Cadastradas</h3>
+   517→   517→                      <div className="flex gap-2 items-center">
+   518→   518→                        <select value={selectedProductId} onChange={(e) => { setSelectedProductId(e.target.value); fetchKeys(e.target.value || undefined); }} className="glass-input rounded-lg px-2 py-1 text-[11px] text-white/60"><option value="">Todos</option>{products.map((p) => (<option key={p.id} value={p.id}>{p.name}</option>))}</select>
+   519→   519→                        <button onClick={() => fetchKeys(selectedProductId || undefined)} className="text-white/30 hover:text-white/60 transition-colors"><RefreshCw className="w-3.5 h-3.5" /></button>
+   520→   520→                      </div>
+   521→   521→                    </div>
+   522→   522→                    <div className="max-h-96 overflow-y-auto custom-scrollbar space-y-1">
+   523→   523→                      {keys.length === 0 ? (<div className="text-center py-8"><Hash className="w-8 h-8 text-white/10 mx-auto mb-2" /><p className="text-sm text-white/20">Nenhuma key.</p></div>) : keys.map((k) => (
+   524→   524→                        <div key={k.id} className={`flex items-center justify-between p-2.5 rounded-lg ${k.isSold ? 'opacity-40' : 'bg-white/[0.02]'}`}>
+   525→   525→                          <div className="flex-1 min-w-0">
+   526→   526→                            <div className="flex items-center gap-2"><code className="text-xs font-mono text-white/80 truncate">{k.code}</code>{k.isSold ? <Badge className="bg-red-500/10 text-red-400 border-red-500/20 text-[10px]">Vendida</Badge> : <Badge className="bg-emerald-500/10 text-emerald-400 border-emerald-500/20 text-[10px]">Disponivel</Badge>}</div>
+   527→   527→                            <p className="text-[10px] text-white/25 mt-0.5">{k.product.name} — {k.product.duration}</p>
+   528→   528→                          </div>
+   529→   529→                          {!k.isSold && <button onClick={() => handleDeleteKey(k.id)} className="text-white/20 hover:text-red-400 transition-colors p-1"><Trash2 className="w-3.5 h-3.5" /></button>}
+   530→   530→                        </div>
+   531→   531→                      ))}
+   532→   532→                    </div>
+   533→   533→                  </div>
+   534→   534→                </TabsContent>
+   535→   535→
+   536→   536→                {/* Sales Tab */}
+   537→   537→                <TabsContent value="sales" className="mt-0">
+   538→   538→                  <div className="glass rounded-xl p-5">
+   539→   539→                    <div className="flex items-center justify-between mb-4">
+   540→   540→                      <h3 className="text-sm font-semibold tracking-wider text-white flex items-center gap-2"><BarChart3 className="w-4 h-4 text-white/40" />Historico de Vendas</h3>
+   541→   541→                      <button onClick={fetchTransactions} className="text-white/30 hover:text-white/60 transition-colors"><RefreshCw className="w-3.5 h-3.5" /></button>
+   542→   542→                    </div>
+   543→   543→                    <div className="max-h-96 overflow-y-auto custom-scrollbar space-y-1">
+   544→   544→                      {transactions.length === 0 ? (<div className="text-center py-8"><History className="w-8 h-8 text-white/10 mx-auto mb-2" /><p className="text-sm text-white/20">Nenhuma venda.</p></div>) : transactions.map((t) => (
+   545→   545→                        <div key={t.id} className="flex items-center justify-between p-3 rounded-lg bg-white/[0.02]">
+   546→   546→                          <div className="flex-1 min-w-0">
+   547→   547→                            <div className="flex items-center gap-2"><span className="text-sm font-medium text-white">{t.productName}</span><Badge className="bg-amber-500/10 text-amber-400 border-amber-500/20 text-[10px]">{t.credits} cr.</Badge></div>
+   548→   548→                            <div className="flex items-center gap-3 mt-1 text-[11px] text-white/30"><span>{t.buyerInfo}</span><code className="text-emerald-400/70 font-mono">{t.key.code}</code></div>
+   549→   549→                          </div>
+   550→   550→                          <span className="text-[11px] text-white/20 shrink-0 ml-3">{new Date(t.createdAt).toLocaleString('pt-BR')}</span>
+   551→   551→                        </div>
+   552→   552→                      ))}
+   553→   553→                    </div>
+   554→   554→                  </div>
+   555→   555→                </TabsContent>
+   556→   556→
+   557→   557→                {/* Users Tab */}
+   558→   558→                <TabsContent value="users" className="space-y-3 mt-0">
+   559→   559→                  <div className="glass rounded-xl p-5">
+   560→   560→                    <h3 className="text-sm font-semibold tracking-wider text-white mb-4 flex items-center gap-2"><UserPlus className="w-4 h-4 text-white/40" />Novo Usuario</h3>
+   561→   561→                    <div className="grid grid-cols-1 sm:grid-cols-5 gap-3">
+   562→   562→                      <input placeholder="Usuario" value={newUser.username} onChange={(e) => setNewUser({ ...newUser, username: e.target.value })} className="glass-input rounded-xl px-4 py-2.5 text-sm text-white placeholder:text-white/20" />
+   563→   563→                      <input type="password" placeholder="Senha" value={newUser.password} onChange={(e) => setNewUser({ ...newUser, password: e.target.value })} className="glass-input rounded-xl px-4 py-2.5 text-sm text-white placeholder:text-white/20" />
+   564→   564→                      <input placeholder="Nome visivel" value={newUser.displayName} onChange={(e) => setNewUser({ ...newUser, displayName: e.target.value })} className="glass-input rounded-xl px-4 py-2.5 text-sm text-white placeholder:text-white/20" />
+   565→   565→                      <input type="number" placeholder="Creditos" value={newUser.credits} onChange={(e) => setNewUser({ ...newUser, credits: e.target.value })} className="glass-input rounded-xl px-4 py-2.5 text-sm text-white placeholder:text-white/20" />
+   566→   566→                      <button onClick={handleCreateUser} className="h-10 rounded-xl bg-white text-black text-xs font-medium tracking-wider hover:bg-white/90 transition-colors flex items-center justify-center gap-1.5"><UserPlus className="w-3.5 h-3.5" />CRIAR</button>
+   567→   567→                    </div>
+   568→   568→                  </div>
+   569→   569→                  <div className="glass rounded-xl p-5">
+   570→   570→                    <div className="flex items-center justify-between mb-4">
+   571→   571→                      <h3 className="text-sm font-semibold tracking-wider text-white">Usuarios Cadastrados</h3>
+   572→   572→                      <button onClick={fetchUsers} className="text-white/30 hover:text-white/60 transition-colors"><RefreshCw className="w-3.5 h-3.5" /></button>
+   573→   573→                    </div>
+   574→   574→                    <div className="max-h-96 overflow-y-auto custom-scrollbar space-y-1">
+   575→   575→                      {users.length === 0 ? (<div className="text-center py-8"><User className="w-8 h-8 text-white/10 mx-auto mb-2" /><p className="text-sm text-white/20">Nenhum usuario.</p></div>) : users.map((u) => (
+   576→   576→                        <div key={u.id} className={`flex items-center justify-between p-3 rounded-lg bg-white/[0.02] ${!u.isActive ? 'opacity-40' : ''}`}>
+   577→   577→                          <div className="flex-1 min-w-0">
+   578→   578→                            <div className="flex items-center gap-2">
+   579→   579→                              <span className="text-sm font-medium text-white">{u.displayName}</span>
+   580→   580→                              {!u.isActive && <Badge className="bg-red-500/10 text-red-400 border-red-500/20 text-[10px]">Inativo</Badge>}
+   581→   581→                            </div>
+   582→   582→                            <div className="flex items-center gap-3 mt-1 text-[11px] text-white/40">
+   583→   583→                              <span>@{u.username}</span>
+   584→   584→                              <span className="text-white/20">desde {new Date(u.createdAt).toLocaleDateString('pt-BR')}</span>
+   585→   585→                            </div>
+   586→   586→                          </div>
+   587→   587→                          <div className="flex items-center gap-2">
+   588→   588→                            {editingUser === u.id ? (
+   589→   589→                              <div className="flex items-center gap-1">
+   590→   590→                                <input type="number" value={editCredits} onChange={(e) => setEditCredits(e.target.value)} className="glass-input rounded-lg px-2 py-1 text-xs text-white w-20" />
+   591→   591→                                <button onClick={() => handleUpdateCredits(u.id, Number(editCredits))} className="text-emerald-400 hover:text-emerald-300 p-1"><Check className="w-4 h-4" /></button>
+   592→   592→                                <button onClick={() => setEditingUser(null)} className="text-white/30 hover:text-white/60 p-1"><X className="w-4 h-4" /></button>
+   593→   593→                              </div>
+   594→   594→                            ) : (
+   595→   595→                              <button onClick={() => { setEditingUser(u.id); setEditCredits(String(u.credits)); }} className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 transition-colors">
+   596→   596→                                <Coins className="w-3.5 h-3.5 text-amber-400" />
+   597→   597→                                <span className="text-xs font-semibold text-amber-400">{u.credits}</span>
+   598→   598→                              </button>
+   599→   599→                            )}
+   600→   600→                            <button onClick={() => handleDeleteUser(u.id)} className="text-white/20 hover:text-red-400 transition-colors p-1"><Trash2 className="w-3.5 h-3.5" /></button>
+   601→   601→                          </div>
+   602→   602→                        </div>
+   603→   603→                      ))}
+   604→   604→                    </div>
+   605→   605→                  </div>
+   606→   606→                </TabsContent>
+   607→   607→              </Tabs>
+   608→   608→            </motion.div>
+   609→   609→          )}
+   610→   610→        </AnimatePresence>
+   611→   611→      </main>
+   612→   612→
+   613→   613→      <footer className="relative z-10 border-t border-white/[0.05] mt-auto">
+   614→   614→        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4 text-center"><p className="text-[11px] text-white/15 tracking-wider">Magnata Key Generator</p></div>
+   615→   615→      </footer>
+   616→   616→
+   617→   617→      {/* Admin Login Modal */}
+   618→   618→      <Dialog open={showAdminLogin} onOpenChange={setShowAdminLogin}>
+   619→   619→        <DialogContent className="glass-strong rounded-2xl max-w-sm p-6 bg-transparent border-white/10">
+   620→   620→          <DialogHeader><DialogTitle className="text-white text-base tracking-wider font-bold">Acesso Admin</DialogTitle><DialogDescription className="text-white/30 text-xs">Digite a senha de administrador</DialogDescription></DialogHeader>
+   621→   621→          <div className="flex gap-2 mt-4">
+   622→   622→            <input type="password" placeholder="Senha..." value={adminPassword} onChange={(e) => setAdminPassword(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleAdminLogin()} className="glass-input flex-1 rounded-xl px-4 py-2.5 text-sm text-white placeholder:text-white/20" />
+   623→   623→            <button onClick={handleAdminLogin} disabled={loggingIn} className="h-10 w-10 rounded-xl bg-white text-black flex items-center justify-center hover:bg-white/90 transition-colors disabled:opacity-50">{loggingIn ? <RefreshCw className="w-4 h-4 animate-spin" /> : <ArrowRight className="w-4 h-4" />}</button>
+   624→   624→          </div>
+   625→   625→        </DialogContent>
+   626→   626→      </Dialog>
+   627→   627→
+   628→   628→      {/* User Login Modal */}
+   629→   629→      <Dialog open={showUserLogin} onOpenChange={setShowUserLogin}>
+   630→   630→        <DialogContent className="glass-strong rounded-2xl max-w-sm p-6 bg-transparent border-white/10">
+   631→   631→          <DialogHeader><DialogTitle className="text-white text-base tracking-wider font-bold">Login</DialogTitle><DialogDescription className="text-white/30 text-xs">Entre com seu usuario e senha</DialogDescription></DialogHeader>
+   632→   632→          <div className="space-y-3 mt-4">
+   633→   633→            <input placeholder="Usuario..." value={loginUsername} onChange={(e) => setLoginUsername(e.target.value)} className="glass-input w-full rounded-xl px-4 py-2.5 text-sm text-white placeholder:text-white/20" />
+   634→   634→            <input type="password" placeholder="Senha..." value={loginPassword} onChange={(e) => setLoginPassword(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleUserLogin()} className="glass-input w-full rounded-xl px-4 py-2.5 text-sm text-white placeholder:text-white/20" />
+   635→   635→            <button onClick={handleUserLogin} disabled={userLoggingIn} className="w-full h-10 rounded-xl bg-white text-black text-xs font-medium tracking-wider hover:bg-white/90 transition-colors disabled:opacity-50 flex items-center justify-center gap-1.5">
+   636→   636→              {userLoggingIn ? <><RefreshCw className="w-4 h-4 animate-spin" /> Entrando...</> : <><LogIn className="w-4 h-4" /> ENTRAR</>}
+   637→   637→            </button>
+   638→   638→          </div>
+   639→   639→        </DialogContent>
+   640→   640→      </Dialog>
+   641→   641→    </div>
+   642→   642→  );
+   643→   643→}
