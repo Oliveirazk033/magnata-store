@@ -39,7 +39,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'name, duration e credits sao obrigatorios' }, { status: 400 });
     }
 
-    const product = await db().product.create({
+    const product = await db(dbUrl).product.create({
       data: { name, description: description || null, duration, credits: Number(credits) },
     });
     return NextResponse.json({ product }, { status: 201 });
