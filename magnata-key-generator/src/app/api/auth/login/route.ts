@@ -1,23 +1,27 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { db, ensureTables } from '@/lib/db';
+import { getClient, ensureTables } from '@/lib/db';
 
 // POST /api/auth/login — Login do usuário
 export async function POST(request: NextRequest) {
   try {
     await ensureTables();
+    const client = getClient();
     const { username, password } = await request.json();
 
     if (!username || !password) {
       return NextResponse.json({ error: 'Usuário e senha são obrigatórios' }, { status: 400 });
     }
 
-    const user = await db().user.findUnique({
-      where: { username: username.trim().toLowerCase() },
+    const result = await client.execute({
+      sql: `SELECT * FROM "User" WHERE username = ?`,
+      args: [username.trim().toLowerCase()],
     });
 
-    if (!user || !user.isActive) {
+    if (result.rows.length === 0 || !Boolean(Number(result.rows[0].isActive))) {
       return NextResponse.json({ error: 'Usuário não encontrado ou inativo' }, { status: 401 });
     }
+
+    const user = result.rows[0];
 
     if (user.password !== password) {
       return NextResponse.json({ error: 'Senha incorreta' }, { status: 401 });
@@ -26,10 +30,10 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       success: true,
       user: {
-        id: user.id,
-        username: user.username,
-        displayName: user.displayName,
-        credits: user.credits,
+        id: user.id as string,
+        username: user.username as string,
+        displayName: user.displayName as string,
+        credits: Number(user.credits),
       },
     });
   } catch (error: unknown) {
@@ -47,16 +51,27 @@ export async function GET(request: NextRequest) {
 
   try {
     await ensureTables();
-    const user = await db().user.findUnique({
-      where: { id: userId },
-      select: { id: true, username: true, displayName: true, credits: true, isActive: true },
+    const client = getClient();
+
+    const result = await client.execute({
+      sql: `SELECT id, username, "displayName", credits, "isActive" FROM "User" WHERE id = ?`,
+      args: [userId],
     });
 
-    if (!user || !user.isActive) {
+    if (result.rows.length === 0 || !Boolean(Number(result.rows[0].isActive))) {
       return NextResponse.json({ error: 'Usuário não encontrado' }, { status: 401 });
     }
 
-    return NextResponse.json({ user });
+    const user = result.rows[0];
+    return NextResponse.json({
+      user: {
+        id: user.id as string,
+        username: user.username as string,
+        displayName: user.displayName as string,
+        credits: Number(user.credits),
+        isActive: Boolean(Number(user.isActive)),
+      },
+    });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Erro desconhecido';
     return NextResponse.json({ error: message }, { status: 500 });

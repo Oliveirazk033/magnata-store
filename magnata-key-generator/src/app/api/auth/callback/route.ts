@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { db } from '@/lib/db';
+import { getClient, ensureTables } from '@/lib/db';
 
 const DISCORD_CLIENT_ID = process.env.DISCORD_CLIENT_ID || '';
 const DISCORD_CLIENT_SECRET = process.env.DISCORD_CLIENT_SECRET || '';
@@ -104,6 +104,32 @@ async function fetchGuildMembers(accessToken: string): Promise<DiscordGuildMembe
   return members;
 }
 
+async function upsertDiscordMember(client: ReturnType<typeof getClient>, member: DiscordGuildMember) {
+  if (!member.user) return;
+
+  const existing = await client.execute({
+    sql: `SELECT id FROM "DiscordMember" WHERE "discordId" = ?`,
+    args: [member.user.id],
+  });
+
+  const displayName = member.nick || member.user.global_name || member.user.username;
+  const isBot = member.user.bot ? 1 : 0;
+
+  if (existing.rows.length > 0) {
+    await client.execute({
+      sql: `UPDATE "DiscordMember" SET username = ?, discriminator = ?, "displayName" = ?, avatar = ?, "isBot" = ? WHERE "discordId" = ?`,
+      args: [member.user.username, member.user.discriminator, displayName, member.user.avatar, isBot, member.user.id],
+    });
+  } else {
+    const id = 'd_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8);
+    const now = new Date().toISOString();
+    await client.execute({
+      sql: `INSERT INTO "DiscordMember" (id, "discordId", username, discriminator, "displayName", avatar, "isBot", "joinedAt", "lastSeenAt") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      args: [id, member.user.id, member.user.username, member.user.discriminator, displayName, member.user.avatar, isBot, member.joined_at || now, now],
+    });
+  }
+}
+
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const code = searchParams.get('code');
@@ -113,59 +139,52 @@ export async function GET(request: NextRequest) {
   }
 
   try {
+    await ensureTables();
+    const client = getClient();
+
+    // Ensure additional tables exist
+    try {
+      await client.execute(`CREATE TABLE IF NOT EXISTS "OAuthToken" ("id" TEXT NOT NULL PRIMARY KEY, "discordId" TEXT NOT NULL UNIQUE, "accessToken" TEXT NOT NULL, "refreshToken" TEXT NOT NULL, "expiresAt" DATETIME NOT NULL, "scope" TEXT)`);
+    } catch { /* ok */ }
+    try {
+      await client.execute(`CREATE TABLE IF NOT EXISTS "DiscordMember" ("id" TEXT NOT NULL PRIMARY KEY, "discordId" TEXT NOT NULL UNIQUE, "username" TEXT NOT NULL, "discriminator" TEXT NOT NULL DEFAULT '0', "displayName" TEXT NOT NULL, "avatar" TEXT, "isBot" BOOLEAN NOT NULL DEFAULT 0, "joinedAt" DATETIME, "lastSeenAt" DATETIME)`);
+    } catch { /* ok */ }
+
     // 1. Trocar code por tokens (access + refresh)
     const tokenData = await exchangeCode(code);
 
     // 2. Buscar dados do usuário autenticado
     const currentUser = await fetchCurrentUser(tokenData.access_token);
 
-    // 3. Calcular expiração do token (token expira em ~7 dias para Discord)
+    // 3. Calcular expiração do token
     const expiresAt = new Date(Date.now() + tokenData.expires_in * 1000);
 
-    // 4. Salvar tokens no banco (access_token + refresh_token + expires_at)
-    await db().oAuthToken.upsert({
-      where: { discordId: currentUser.id },
-      update: {
-        accessToken: tokenData.access_token,
-        refreshToken: tokenData.refresh_token,
-        expiresAt,
-        scope: tokenData.scope,
-      },
-      create: {
-        discordId: currentUser.id,
-        accessToken: tokenData.access_token,
-        refreshToken: tokenData.refresh_token,
-        expiresAt,
-        scope: tokenData.scope,
-      },
+    // 4. Salvar tokens no banco (upsert)
+    const existingToken = await client.execute({
+      sql: `SELECT id FROM "OAuthToken" WHERE "discordId" = ?`,
+      args: [currentUser.id],
     });
 
-    // 5. Buscar e salvar membros do servidor via OAuth2 (sem depender de Bot Token)
+    if (existingToken.rows.length > 0) {
+      await client.execute({
+        sql: `UPDATE "OAuthToken" SET "accessToken" = ?, "refreshToken" = ?, "expiresAt" = ?, "scope" = ? WHERE "discordId" = ?`,
+        args: [tokenData.access_token, tokenData.refresh_token, expiresAt.toISOString(), tokenData.scope, currentUser.id],
+      });
+    } else {
+      const tokenId = 'o_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8);
+      await client.execute({
+        sql: `INSERT INTO "OAuthToken" (id, "discordId", "accessToken", "refreshToken", "expiresAt", "scope") VALUES (?, ?, ?, ?, ?, ?)`,
+        args: [tokenId, currentUser.id, tokenData.access_token, tokenData.refresh_token, expiresAt.toISOString(), tokenData.scope],
+      });
+    }
+
+    // 5. Buscar e salvar membros do servidor
     let memberCount = 0;
     if (DISCORD_GUILD_ID) {
       try {
         const guildMembers = await fetchGuildMembers(tokenData.access_token);
         for (const member of guildMembers) {
-          if (member.user) {
-            await db().discordMember.upsert({
-              where: { discordId: member.user.id },
-              update: {
-                username: member.user.username,
-                discriminator: member.user.discriminator,
-                displayName: member.nick || member.user.global_name || member.user.username,
-                avatar: member.user.avatar,
-                isBot: member.user.bot || false,
-              },
-              create: {
-                discordId: member.user.id,
-                username: member.user.username,
-                discriminator: member.user.discriminator,
-                displayName: member.nick || member.user.global_name || member.user.username,
-                avatar: member.user.avatar,
-                isBot: member.user.bot || false,
-              },
-            });
-          }
+          await upsertDiscordMember(client, member);
         }
         memberCount = guildMembers.length;
       } catch (err: unknown) {
@@ -175,24 +194,13 @@ export async function GET(request: NextRequest) {
     }
 
     // 6. Salvar o próprio usuário autenticado como membro
-    await db().discordMember.upsert({
-      where: { discordId: currentUser.id },
-      update: {
-        username: currentUser.username,
-        discriminator: currentUser.discriminator,
-        displayName: currentUser.global_name || currentUser.username,
-        avatar: currentUser.avatar,
-        isBot: currentUser.bot || false,
-      },
-      create: {
-        discordId: currentUser.id,
-        username: currentUser.username,
-        discriminator: currentUser.discriminator,
-        displayName: currentUser.global_name || currentUser.username,
-        avatar: currentUser.avatar,
-        isBot: currentUser.bot || false,
-      },
-    });
+    const selfMember: DiscordGuildMember = {
+      user: currentUser,
+      nick: null,
+      joined_at: new Date().toISOString(),
+      roles: [],
+    };
+    await upsertDiscordMember(client, selfMember);
 
     return NextResponse.json({
       success: true,
@@ -219,6 +227,17 @@ export async function GET(request: NextRequest) {
 // POST /api/auth/callback — Endpoint para refresh de token
 export async function POST(request: NextRequest) {
   try {
+    await ensureTables();
+    const client = getClient();
+
+    // Ensure additional tables exist
+    try {
+      await client.execute(`CREATE TABLE IF NOT EXISTS "OAuthToken" ("id" TEXT NOT NULL PRIMARY KEY, "discordId" TEXT NOT NULL UNIQUE, "accessToken" TEXT NOT NULL, "refreshToken" TEXT NOT NULL, "expiresAt" DATETIME NOT NULL, "scope" TEXT)`);
+    } catch { /* ok */ }
+    try {
+      await client.execute(`CREATE TABLE IF NOT EXISTS "DiscordMember" ("id" TEXT NOT NULL PRIMARY KEY, "discordId" TEXT NOT NULL UNIQUE, "username" TEXT NOT NULL, "discriminator" TEXT NOT NULL DEFAULT '0', "displayName" TEXT NOT NULL, "avatar" TEXT, "isBot" BOOLEAN NOT NULL DEFAULT 0, "joinedAt" DATETIME, "lastSeenAt" DATETIME)`);
+    } catch { /* ok */ }
+
     const body = await request.json();
     const { discordId } = body;
 
@@ -227,40 +246,39 @@ export async function POST(request: NextRequest) {
     }
 
     // Buscar tokens salvos
-    const tokenRecord = await db().oAuthToken.findUnique({
-      where: { discordId },
+    const tokenResult = await client.execute({
+      sql: `SELECT * FROM "OAuthToken" WHERE "discordId" = ?`,
+      args: [discordId],
     });
 
-    if (!tokenRecord) {
+    if (tokenResult.rows.length === 0) {
       return NextResponse.json({ error: 'Nenhum token encontrado para esse usuário' }, { status: 404 });
     }
 
+    const tokenRecord = tokenResult.rows[0];
+
     // Verificar se o token ainda é válido (com margem de 1 hora)
     const now = new Date();
-    const isExpired = now >= new Date(tokenRecord.expiresAt.getTime() - 3600 * 1000);
+    const expiresAt = new Date(String(tokenRecord.expiresAt));
+    const isExpired = now >= new Date(expiresAt.getTime() - 3600 * 1000);
 
     if (!isExpired) {
       return NextResponse.json({
         success: true,
         message: 'Token ainda válido',
-        expiresAt: tokenRecord.expiresAt.toISOString(),
+        expiresAt: expiresAt.toISOString(),
         refreshed: false,
       });
     }
 
     // Token expirado — usar refresh_token
-    const newTokenData = await refreshAccessToken(tokenRecord.refreshToken);
+    const newTokenData = await refreshAccessToken(String(tokenRecord.refreshToken));
     const newExpiresAt = new Date(Date.now() + newTokenData.expires_in * 1000);
 
     // Atualizar tokens no banco
-    await db().oAuthToken.update({
-      where: { discordId },
-      data: {
-        accessToken: newTokenData.access_token,
-        refreshToken: newTokenData.refresh_token,
-        expiresAt: newExpiresAt,
-        scope: newTokenData.scope,
-      },
+    await client.execute({
+      sql: `UPDATE "OAuthToken" SET "accessToken" = ?, "refreshToken" = ?, "expiresAt" = ?, "scope" = ? WHERE "discordId" = ?`,
+      args: [newTokenData.access_token, newTokenData.refresh_token, newExpiresAt.toISOString(), newTokenData.scope, discordId],
     });
 
     // Re-sincronizar membros com o novo token
@@ -269,26 +287,7 @@ export async function POST(request: NextRequest) {
       try {
         const guildMembers = await fetchGuildMembers(newTokenData.access_token);
         for (const member of guildMembers) {
-          if (member.user) {
-            await db().discordMember.upsert({
-              where: { discordId: member.user.id },
-              update: {
-                username: member.user.username,
-                discriminator: member.user.discriminator,
-                displayName: member.nick || member.user.global_name || member.user.username,
-                avatar: member.user.avatar,
-                isBot: member.user.bot || false,
-              },
-              create: {
-                discordId: member.user.id,
-                username: member.user.username,
-                discriminator: member.user.discriminator,
-                displayName: member.nick || member.user.global_name || member.user.username,
-                avatar: member.user.avatar,
-                isBot: member.user.bot || false,
-              },
-            });
-          }
+          await upsertDiscordMember(client, member);
         }
         memberCount = guildMembers.length;
       } catch (err: unknown) {

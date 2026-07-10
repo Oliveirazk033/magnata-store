@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { db, ensureTables } from '@/lib/db';
+import { getClient, ensureTables } from '@/lib/db';
 
 // POST /api/auth/register — Criar usuário (admin)
 export async function POST(request: NextRequest) {
@@ -10,27 +10,31 @@ export async function POST(request: NextRequest) {
 
   try {
     await ensureTables();
+    const client = getClient();
     const { username, password, displayName, credits } = await request.json();
 
     if (!username || !password || !displayName) {
       return NextResponse.json({ error: 'username, password e displayName são obrigatórios' }, { status: 400 });
     }
 
-    const existing = await db().user.findUnique({ where: { username } });
-    if (existing) {
+    const existing = await client.execute({
+      sql: `SELECT id FROM "User" WHERE username = ?`,
+      args: [username],
+    });
+    if (existing.rows.length > 0) {
       return NextResponse.json({ error: 'Nome de usuário já existe' }, { status: 400 });
     }
 
-    const user = await db().user.create({
-      data: {
-        username: username.trim().toLowerCase(),
-        password,
-        displayName,
-        credits: Number(credits) || 0,
-      },
+    const id = 'u_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8);
+    const now = new Date().toISOString();
+    await client.execute({
+      sql: `INSERT INTO "User" (id, username, password, "displayName", credits, "isActive", "createdAt", "updatedAt") VALUES (?, ?, ?, ?, ?, 1, ?, ?)`,
+      args: [id, username.trim().toLowerCase(), password, displayName, Number(credits) || 0, now, now],
     });
 
-    return NextResponse.json({ user: { id: user.id, username: user.username, displayName: user.displayName, credits: user.credits } }, { status: 201 });
+    return NextResponse.json({
+      user: { id, username: username.trim().toLowerCase(), displayName, credits: Number(credits) || 0 },
+    }, { status: 201 });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Erro desconhecido';
     return NextResponse.json({ error: message }, { status: 500 });
@@ -46,10 +50,21 @@ export async function GET(request: NextRequest) {
 
   try {
     await ensureTables();
-    const users = await db().user.findMany({
-      select: { id: true, username: true, displayName: true, credits: true, isActive: true, createdAt: true },
-      orderBy: { createdAt: 'desc' },
+    const client = getClient();
+
+    const result = await client.execute({
+      sql: `SELECT id, username, "displayName", credits, "isActive", "createdAt" FROM "User" ORDER BY "createdAt" DESC`,
+      args: [],
     });
+    const users = result.rows.map((row) => ({
+      id: row.id as string,
+      username: row.username as string,
+      displayName: row.displayName as string,
+      credits: Number(row.credits),
+      isActive: Boolean(Number(row.isActive)),
+      createdAt: String(row.createdAt),
+    }));
+
     return NextResponse.json({ users });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Erro desconhecido';
@@ -66,24 +81,61 @@ export async function PATCH(request: NextRequest) {
 
   try {
     await ensureTables();
+    const client = getClient();
     const { userId, credits, displayName, isActive } = await request.json();
 
     if (!userId) {
       return NextResponse.json({ error: 'userId é obrigatório' }, { status: 400 });
     }
 
-    const updateData: Record<string, unknown> = {};
-    if (credits !== undefined) updateData.credits = Number(credits);
-    if (displayName !== undefined) updateData.displayName = displayName;
-    if (isActive !== undefined) updateData.isActive = isActive;
+    const setClauses: string[] = [];
+    const args: unknown[] = [];
 
-    const user = await db().user.update({
-      where: { id: userId },
-      data: updateData,
-      select: { id: true, username: true, displayName: true, credits: true, isActive: true },
+    if (credits !== undefined) {
+      setClauses.push(`credits = ?`);
+      args.push(Number(credits));
+    }
+    if (displayName !== undefined) {
+      setClauses.push(`"displayName" = ?`);
+      args.push(displayName);
+    }
+    if (isActive !== undefined) {
+      setClauses.push(`"isActive" = ?`);
+      args.push(isActive ? 1 : 0);
+    }
+
+    if (setClauses.length === 0) {
+      return NextResponse.json({ error: 'Nenhum campo para atualizar' }, { status: 400 });
+    }
+
+    const now = new Date().toISOString();
+    setClauses.push(`"updatedAt" = ?`);
+    args.push(now);
+    args.push(userId);
+
+    const sql = `UPDATE "User" SET ${setClauses.join(', ')} WHERE id = ?`;
+    await client.execute({ sql, args });
+
+    // Fetch updated user
+    const updatedResult = await client.execute({
+      sql: `SELECT id, username, "displayName", credits, "isActive" FROM "User" WHERE id = ?`,
+      args: [userId],
     });
 
-    return NextResponse.json({ user });
+    if (updatedResult.rows.length === 0) {
+      return NextResponse.json({ error: 'Usuário não encontrado' }, { status: 404 });
+    }
+
+    const user = updatedResult.rows[0];
+    return NextResponse.json({
+      user: {
+        id: user.id as string,
+        username: user.username as string,
+        displayName: user.displayName as string,
+        credits: Number(user.credits),
+        isActive: Boolean(Number(user.isActive)),
+      },
+    });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Erro desconhecido';
     return NextResponse.json({ error: message }, { status: 500 });
@@ -106,7 +158,11 @@ export async function DELETE(request: NextRequest) {
 
   try {
     await ensureTables();
-    await db().user.delete({ where: { id } });
+    const client = getClient();
+    await client.execute({
+      sql: `DELETE FROM "User" WHERE id = ?`,
+      args: [id],
+    });
     return NextResponse.json({ success: true, message: 'Usuário removido' });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Erro desconhecido';
