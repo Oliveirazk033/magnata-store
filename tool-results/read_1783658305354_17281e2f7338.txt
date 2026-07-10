@@ -1,0 +1,1161 @@
+     1→'use client';
+     2→
+     3→import { useState, useEffect, useCallback } from 'react';
+     4→import { motion, AnimatePresence } from 'framer-motion';
+     5→import { Button } from '@/components/ui/button';
+     6→import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+     7→import { Badge } from '@/components/ui/badge';
+     8→import { Input } from '@/components/ui/input';
+     9→import { Textarea } from '@/components/ui/textarea';
+    10→import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+    11→import { Separator } from '@/components/ui/separator';
+    12→import { Skeleton } from '@/components/ui/skeleton';
+    13→import {
+    14→  Dialog,
+    15→  DialogContent,
+    16→  DialogDescription,
+    17→  DialogHeader,
+    18→  DialogTitle,
+    19→} from '@/components/ui/dialog';
+    20→import { toast } from 'sonner';
+    21→import Starfield from '@/components/Starfield';
+    22→import {
+    23→  Key, Shield, Plus, Trash2, RefreshCw, Coins, ArrowRight,
+    24→  Lock, Unlock, History, Copy, Check, Store, BarChart3,
+    25→  Package, BookOpen, X, LayoutDashboard, Hash, User, UserPlus, LogIn, LogOut, Wallet, Play, Link2, ExternalLink,
+    26→} from 'lucide-react';
+    27→
+    28→/* ===== Types ===== */
+    29→interface Product {
+    30→  id: string; name: string; description: string | null;
+    31→  duration: string; credits: number; isActive: boolean;
+    32→  _count: { keys: number };
+    33→}
+    34→interface TransactionItem {
+    35→  id: string; key: { code: string }; productName: string;
+    36→  credits: number; buyerInfo: string; createdAt: string;
+    37→}
+    38→interface KeyItem {
+    39→  id: string; code: string; productId: string;
+    40→  product: { name: string; duration: string };
+    41→  isSold: boolean; soldTo: string | null; soldAt: string | null; createdAt: string;
+    42→}
+    43→interface UserData {
+    44→  id: string; username: string; displayName: string;
+    45→  credits: number; isActive: boolean; createdAt: string;
+    46→}
+    47→interface LoggedUser {
+    48→  id: string; username: string; displayName: string; credits: number;
+    49→}
+    50→interface TutorialItem {
+    51→  id: string; title: string; url: string; embedUrl: string;
+    52→  sortOrder: number; isActive: boolean; createdAt: string;
+    53→}
+    54→interface LinkItem {
+    55→  id: string; title: string; url: string; description: string | null;
+    56→  sortOrder: number; isActive: boolean; createdAt: string;
+    57→}
+    58→interface UserHistoryItem {
+    59→  id: string; keyCode: string; productName: string;
+    60→  credits: number; createdAt: string;
+    61→}
+    62→
+    63→/* ===== Main ===== */
+    64→export default function Home() {
+    65→  // Auth states
+    66→  const [isAdmin, setIsAdmin] = useState(false);
+    67→  const [adminPassword, setAdminPassword] = useState('');
+    68→  const [loggingIn, setLoggingIn] = useState(false);
+    69→  const [showAdminLogin, setShowAdminLogin] = useState(false);
+    70→
+    71→  // User states
+    72→  const [loggedUser, setLoggedUser] = useState<LoggedUser | null>(null);
+    73→  const [showUserLogin, setShowUserLogin] = useState(false);
+    74→  const [loginUsername, setLoginUsername] = useState('');
+    75→  const [loginPassword, setLoginPassword] = useState('');
+    76→  const [userLoggingIn, setUserLoggingIn] = useState(false);
+    77→
+    78→  // Data states
+    79→  const [products, setProducts] = useState<Product[]>([]);
+    80→  const [loadingProducts, setLoadingProducts] = useState(false);
+    81→  const [transactions, setTransactions] = useState<TransactionItem[]>([]);
+    82→  const [stats, setStats] = useState({ totalCredits: 0, totalSales: 0 });
+    83→  const [keys, setKeys] = useState<KeyItem[]>([]);
+    84→  const [users, setUsers] = useState<UserData[]>([]);
+    85→  const [selectedProductId, setSelectedProductId] = useState('');
+    86→  const [selectedCategory, setSelectedCategory] = useState('');
+    87→  const [generateQuantity, setGenerateQuantity] = useState(1);
+    88→  const [buyingProductId, setBuyingProductId] = useState<string | null>(null);
+    89→  const [deliveredKey, setDeliveredKey] = useState<string | null>(null);
+    90→  const [deliveredKeys, setDeliveredKeys] = useState<string[]>([]);
+    91→  const [deliveredProduct, setDeliveredProduct] = useState('');
+    92→  const [remainingCredits, setRemainingCredits] = useState(0);
+    93→
+    94→  // Admin form states
+    95→  const [newProduct, setNewProduct] = useState({ name: '', description: '', duration: '', credits: '' });
+    96→  const [newKeysText, setNewKeysText] = useState('');
+    97→  const [addingKeysTo, setAddingKeysTo] = useState('');
+    98→  const [copiedKey, setCopiedKey] = useState(false);
+    99→  const [adminTab, setAdminTab] = useState('products');
+   100→  const [userTab, setUserTab] = useState('dashboard');
+   101→  const [sidebarOpen, setSidebarOpen] = useState(false);
+   102→
+   103→  // User management
+   104→  const [newUser, setNewUser] = useState({ username: '', password: '', displayName: '', credits: '10' });
+   105→  const [editingUser, setEditingUser] = useState<string | null>(null);
+   106→  const [editCredits, setEditCredits] = useState('');
+   107→
+   108→  // Tutorials
+   109→  const [tutorials, setTutorials] = useState<TutorialItem[]>([]);
+   110→  const [userTutorials, setUserTutorials] = useState<TutorialItem[]>([]);
+   111→  const [newTutorial, setNewTutorial] = useState({ title: '', url: '' });
+   112→
+   113→  // Links
+   114→  const [links, setLinks] = useState<LinkItem[]>([]);
+   115→  const [userLinks, setUserLinks] = useState<LinkItem[]>([]);
+   116→  const [newLink, setNewLink] = useState({ title: '', url: '', description: '' });
+   117→
+   118→  // User history
+   119→  const [userHistory, setUserHistory] = useState<UserHistoryItem[]>([]);
+   120→  const [userTotalKeys, setUserTotalKeys] = useState(0);
+   121→  const [userTotalCreditsUsed, setUserTotalCreditsUsed] = useState(0);
+   122→  const [historySearch, setHistorySearch] = useState('');
+   123→
+   124→  const getUserHeaders = () => loggedUser ? ({ 'x-user-id': loggedUser.id }) : {};
+   125→  const getAdminHeaders = () => ({ 'x-admin-key': adminPassword });
+   126→
+   127→  const fetchProducts = useCallback(async () => {
+   128→    setLoadingProducts(true);
+   129→    try {
+   130→      const res = await fetch('/api/products');
+   131→      const data = await res.json();
+   132→      if (data.products) setProducts(data.products);
+   133→    } catch { toast.error('Erro ao carregar produtos'); }
+   134→    finally { setLoadingProducts(false); }
+   135→  }, []);
+   136→
+   137→  const fetchTransactions = useCallback(async () => {
+   138→    try {
+   139→      const res = await fetch('/api/transactions', { headers: { 'x-admin-key': adminPassword } });
+   140→      const data = await res.json();
+   141→      if (data.transactions) { setTransactions(data.transactions); setStats({ totalCredits: data.totalCredits, totalSales: data.totalSales }); }
+   142→    } catch { /* silent */ }
+   143→  }, [adminPassword]);
+   144→
+   145→  const fetchKeys = useCallback(async (productId?: string) => {
+   146→    try {
+   147→      const url = productId ? `/api/keys?productId=${productId}` : '/api/keys';
+   148→      const res = await fetch(url, { headers: { 'x-admin-key': adminPassword } });
+   149→      const data = await res.json();
+   150→      if (data.keys) setKeys(data.keys);
+   151→    } catch { /* silent */ }
+   152→  }, [adminPassword]);
+   153→
+   154→  const fetchUsers = useCallback(async () => {
+   155→    try {
+   156→      const res = await fetch('/api/auth/register', { headers: { 'x-admin-key': adminPassword } });
+   157→      const data = await res.json();
+   158→      if (data.users) setUsers(data.users);
+   159→      else if (data.error) { toast.error('Erro usuarios: ' + data.error); }
+   160→    } catch (err) { const msg = err instanceof Error ? err.message : 'Erro'; toast.error('Fetch users: ' + msg); }
+   161→  }, [adminPassword]);
+   162→
+   163→  const fetchTutorials = useCallback(async (isAdminFetch: boolean) => {
+   164→    try {
+   165→      const headers = isAdminFetch ? { 'x-admin-key': adminPassword } : {};
+   166→      const res = await fetch('/api/tutorials', { headers });
+   167→      const data = await res.json();
+   168→      if (data.tutorials) {
+   169→        if (isAdminFetch) setTutorials(data.tutorials);
+   170→        else setUserTutorials(data.tutorials);
+   171→      }
+   172→    } catch { /* silent */ }
+   173→  }, [adminPassword]);
+   174→
+   175→  const fetchUserTutorials = useCallback(async () => {
+   176→    try {
+   177→      const res = await fetch('/api/tutorials');
+   178→      const data = await res.json();
+   179→      if (data.tutorials) setUserTutorials(data.tutorials);
+   180→    } catch { /* silent */ }
+   181→  }, []);
+   182→
+   183→  const fetchLinks = useCallback(async (isAdminFetch: boolean) => {
+   184→    try {
+   185→      const headers = isAdminFetch ? { 'x-admin-key': adminPassword } : {};
+   186→      const res = await fetch('/api/links', { headers });
+   187→      const data = await res.json();
+   188→      if (data.links) {
+   189→        if (isAdminFetch) setLinks(data.links);
+   190→        else setUserLinks(data.links);
+   191→      }
+   192→    } catch { /* silent */ }
+   193→  }, [adminPassword]);
+   194→
+   195→  const fetchUserLinks = useCallback(async () => {
+   196→    try {
+   197→      const res = await fetch('/api/links');
+   198→      const data = await res.json();
+   199→      if (data.links) setUserLinks(data.links);
+   200→    } catch { /* silent */ }
+   201→  }, []);
+   202→
+   203→  const fetchUserHistory = useCallback(async () => {
+   204→    if (!loggedUser) return;
+   205→    try {
+   206→      const res = await fetch('/api/user/history', { headers: { 'x-user-id': loggedUser.id } });
+   207→      const data = await res.json();
+   208→      if (data.transactions) {
+   209→        setUserHistory(data.transactions);
+   210→        setUserTotalKeys(data.totalKeys);
+   211→        setUserTotalCreditsUsed(data.totalCreditsUsed);
+   212→      }
+   213→    } catch { /* silent */ }
+   214→  }, [loggedUser?.id]);
+   215→
+   216→  useEffect(() => { fetchProducts(); fetchUserTutorials(); fetchUserLinks(); }, [fetchProducts, fetchUserTutorials, fetchUserLinks]);
+   217→  useEffect(() => {
+   218→    if (isAdmin) { fetchTransactions(); fetchKeys(); fetchUsers(); fetchTutorials(true); fetchLinks(true); }
+   219→  }, [isAdmin, fetchTransactions, fetchKeys, fetchUsers, fetchTutorials, fetchLinks]);
+   220→  useEffect(() => { fetchUserHistory(); }, [fetchUserHistory]);
+   221→
+   222→  // Refresh user credits after login
+   223→  const refreshUser = async () => {
+   224→    if (!loggedUser) return;
+   225→    try {
+   226→      const res = await fetch('/api/auth/login', { headers: { 'x-user-id': loggedUser.id } });
+   227→      const data = await res.json();
+   228→      if (data.user) setLoggedUser(data.user);
+   229→    } catch { /* silent */ }
+   230→  };
+   231→
+   232→  // === HANDLERS ===
+   233→  const handleAdminLogin = async () => {
+   234→    setLoggingIn(true);
+   235→    try {
+   236→      const res = await fetch('/api/admin/auth', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password: adminPassword }) });
+   237→      const data = await res.json();
+   238→      if (data.success) {
+   239→        setIsAdmin(true);
+   240→        setShowAdminLogin(false);
+   241→        toast.success('Login admin realizado');
+   242→        // Fetch admin data directly after login
+   243→        setTimeout(async () => {
+   244→          const headers = { 'x-admin-key': adminPassword };
+   245→          try {
+   246→            const [tRes, kRes, uRes, tutRes, lnkRes] = await Promise.all([
+   247→              fetch('/api/transactions', { headers }),
+   248→              fetch('/api/keys', { headers }),
+   249→              fetch('/api/auth/register', { headers }),
+   250→              fetch('/api/tutorials', { headers }),
+   251→              fetch('/api/links', { headers }),
+   252→            ]);
+   253→            const [tData, kData, uData, tutData, lnkData] = await Promise.all([tRes.json(), kRes.json(), uRes.json(), tutRes.json(), lnkRes.json()]);
+   254→            if (tData.transactions) { setTransactions(tData.transactions); setStats({ totalCredits: tData.totalCredits, totalSales: tData.totalSales }); }
+   255→            if (kData.keys) setKeys(kData.keys);
+   256→            if (uData.users) setUsers(uData.users);
+   257→            if (tutData.tutorials) setTutorials(tutData.tutorials);
+   258→            if (lnkData.links) setLinks(lnkData.links);
+   259→          } catch (err) { console.error('Admin data fetch error:', err); }
+   260→        }, 100);
+   261→      }
+   262→      else toast.error('Senha incorreta');
+   263→    } catch { toast.error('Erro ao fazer login'); }
+   264→    finally { setLoggingIn(false); }
+   265→  };
+   266→
+   267→  const handleUserLogin = async () => {
+   268→    if (!loginUsername.trim() || !loginPassword.trim()) { toast.error('Preencha usuário e senha'); return; }
+   269→    setUserLoggingIn(true);
+   270→    try {
+   271→      const res = await fetch('/api/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: loginUsername, password: loginPassword }) });
+   272→      const data = await res.json();
+   273→      if (data.success) {
+   274→        setLoggedUser(data.user);
+   275→        setShowUserLogin(false);
+   276→        setLoginUsername('');
+   277→        setLoginPassword('');
+   278→        toast.success(`Bem-vindo, ${data.user.displayName}!`);
+   279→      } else toast.error(data.error || 'Erro no login');
+   280→    } catch { toast.error('Erro ao fazer login'); }
+   281→    finally { setUserLoggingIn(false); }
+   282→  };
+   283→
+   284→  const handleUserLogout = () => {
+   285→    setLoggedUser(null);
+   286→    setDeliveredKey(null);
+   287→    setDeliveredKeys([]);
+   288→    toast.success('Desconectado');
+   289→  };
+   290→
+   291→  const handleCreateUser = async () => {
+   292→    if (!newUser.username || !newUser.password || !newUser.displayName) { alert('Preencha todos os campos'); return; }
+   293→    try {
+   294→      const res = await fetch('/api/auth/register', {
+   295→        method: 'POST', headers: { 'Content-Type': 'application/json', ...getAdminHeaders() },
+   296→        body: JSON.stringify(newUser),
+   297→      });
+   298→      const data = await res.json();
+   299→      if (data.user) {
+   300→        toast.success(`Usuario "${data.user.displayName}" criado com ${data.user.credits} creditos!`);
+   301→        setNewUser({ username: '', password: '', displayName: '', credits: '10' });
+   302→        fetchUsers();
+   303→      } else { alert('Erro: ' + (data.error || 'Erro ao criar')); toast.error(data.error || 'Erro ao criar'); }
+   304→    } catch (err) { const msg = err instanceof Error ? err.message : 'Erro'; alert('Catch: ' + msg); }
+   305→  };
+   306→
+   307→  const handleUpdateCredits = async (userId: string, credits: number) => {
+   308→    try {
+   309→      const res = await fetch('/api/auth/register', {
+   310→        method: 'PATCH', headers: { 'Content-Type': 'application/json', ...getAdminHeaders() },
+   311→        body: JSON.stringify({ userId, credits }),
+   312→      });
+   313→      const data = await res.json();
+   314→      if (data.user) { toast.success(`Creditos atualizados para ${data.user.credits}`); setEditingUser(null); fetchUsers(); }
+   315→      else { alert('Erro: ' + (data.error || 'Erro')); toast.error(data.error || 'Erro'); }
+   316→    } catch (err) { const msg = err instanceof Error ? err.message : 'Erro'; alert('Catch: ' + msg); }
+   317→  };
+   318→
+   319→  const handleDeleteUser = async (userId: string) => {
+   320→    if (!confirm('Deletar este usuário?')) return;
+   321→    try {
+   322→      const res = await fetch(`/api/auth/register?id=${userId}`, { method: 'DELETE', headers: getAdminHeaders() });
+   323→      const data = await res.json();
+   324→      if (data.success) { toast.success('Usuario removido'); fetchUsers(); }
+   325→      else { alert('Erro: ' + (data.error || 'Erro')); toast.error(data.error || 'Erro'); }
+   326→    } catch (err) { const msg = err instanceof Error ? err.message : 'Erro'; alert('Catch: ' + msg); }
+   327→  };
+   328→
+   329→  const handleCreateTutorial = async () => {
+   330→    if (!newTutorial.title.trim() || !newTutorial.url.trim()) { toast.error('Preencha titulo e URL do video'); return; }
+   331→    try {
+   332→      const res = await fetch('/api/tutorials', {
+   333→        method: 'POST', headers: { 'Content-Type': 'application/json', ...getAdminHeaders() },
+   334→        body: JSON.stringify(newTutorial),
+   335→      });
+   336→      const data = await res.json();
+   337→      if (data.tutorial) {
+   338→        toast.success(`Tutorial "${data.tutorial.title}" adicionado!`);
+   339→        setNewTutorial({ title: '', url: '' });
+   340→        fetchTutorials(true);
+   341→      } else { toast.error(data.error || 'Erro ao criar tutorial'); }
+   342→    } catch { toast.error('Erro'); }
+   343→  };
+   344→
+   345→  const handleDeleteTutorial = async (id: string) => {
+   346→    if (!confirm('Remover este tutorial?')) return;
+   347→    try {
+   348→      const res = await fetch(`/api/tutorials?id=${id}`, { method: 'DELETE', headers: getAdminHeaders() });
+   349→      const data = await res.json();
+   350→      if (data.success) { toast.success('Tutorial removido'); fetchTutorials(true); }
+   351→      else toast.error(data.error || 'Erro');
+   352→    } catch { toast.error('Erro'); }
+   353→  };
+   354→
+   355→  const handleCreateLink = async () => {
+   356→    if (!newLink.title.trim() || !newLink.url.trim()) { toast.error('Preencha titulo e URL do link'); return; }
+   357→    try {
+   358→      const res = await fetch('/api/links', {
+   359→        method: 'POST', headers: { 'Content-Type': 'application/json', ...getAdminHeaders() },
+   360→        body: JSON.stringify(newLink),
+   361→      });
+   362→      const data = await res.json();
+   363→      if (data.link) {
+   364→        toast.success(`Link "${data.link.title}" adicionado!`);
+   365→        setNewLink({ title: '', url: '', description: '' });
+   366→        fetchLinks(true);
+   367→      } else { toast.error(data.error || 'Erro ao criar link'); }
+   368→    } catch { toast.error('Erro'); }
+   369→  };
+   370→
+   371→  const handleDeleteLink = async (id: string) => {
+   372→    if (!confirm('Remover este link?')) return;
+   373→    try {
+   374→      const res = await fetch(`/api/links?id=${id}`, { method: 'DELETE', headers: getAdminHeaders() });
+   375→      const data = await res.json();
+   376→      if (data.success) { toast.success('Link removido'); fetchLinks(true); }
+   377→      else toast.error(data.error || 'Erro');
+   378→    } catch { toast.error('Erro'); }
+   379→  };
+   380→
+   381→  const handleCreateProduct = async () => {
+   382→    if (!newProduct.name || !newProduct.duration || !newProduct.credits) { toast.error('Preencha todos os campos'); return; }
+   383→    try {
+   384→      const res = await fetch('/api/products', { method: 'POST', headers: { 'Content-Type': 'application/json', ...getAdminHeaders() }, body: JSON.stringify(newProduct) });
+   385→      const data = await res.json();
+   386→      if (data.product) { toast.success(`"${data.product.name}" criado!`); setNewProduct({ name: '', description: '', duration: '', credits: '' }); fetchProducts(); }
+   387→      else toast.error(data.error || 'Erro ao criar');
+   388→    } catch { toast.error('Erro'); }
+   389→  };
+   390→
+   391→  const handleAddKeys = async () => {
+   392→    if (!addingKeysTo || !newKeysText.trim()) { toast.error('Selecione produto e cole as keys'); return; }
+   393→    const codes = newKeysText.split('\n').map((l: string) => l.trim()).filter(Boolean);
+   394→    try {
+   395→      const res = await fetch('/api/keys', { method: 'POST', headers: { 'Content-Type': 'application/json', ...getAdminHeaders() }, body: JSON.stringify({ productId: addingKeysTo, codes }) });
+   396→      const data = await res.json();
+   397→      if (data.added > 0) { toast.success(data.message); setNewKeysText(''); fetchProducts(); fetchKeys(addingKeysTo); }
+   398→      else toast.error(data.error || 'Nenhuma key adicionada');
+   399→    } catch { toast.error('Erro'); }
+   400→  };
+   401→
+   402→  const handleDeleteProduct = async (id: string, name: string) => {
+   403→    if (!confirm(`Desativar "${name}"?`)) return;
+   404→    try {
+   405→      await fetch(`/api/products?id=${id}`, { method: 'DELETE', headers: getAdminHeaders() });
+   406→      toast.success('Produto desativado'); fetchProducts();
+   407→    } catch { toast.error('Erro'); }
+   408→  };
+   409→
+   410→  const handleDeleteKey = async (id: string) => {
+   411→    try {
+   412→      const res = await fetch(`/api/keys?id=${id}`, { method: 'DELETE', headers: getAdminHeaders() });
+   413→      const data = await res.json();
+   414→      if (data.success) { toast.success('Key removida'); fetchKeys(selectedProductId || undefined); fetchProducts(); }
+   415→      else toast.error(data.error || 'Erro');
+   416→    } catch { toast.error('Erro'); }
+   417→  };
+   418→
+   419→  const handleBuy = async (productId: string, qty: number = 1) => {
+   420→    if (!loggedUser) { setShowUserLogin(true); return; }
+   421→    setBuyingProductId(productId); setDeliveredKey(null); setDeliveredKeys([]);
+   422→    try {
+   423→      const generatedKeys: string[] = [];
+   424→      let lastProduct = '';
+   425→      let lastCredits = loggedUser.credits;
+   426→
+   427→      for (let i = 0; i < qty; i++) {
+   428→        const res = await fetch('/api/buy', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-user-id': loggedUser.id }, body: JSON.stringify({ productId }) });
+   429→        const data = await res.json();
+   430→        if (data.success) {
+   431→          generatedKeys.push(data.key);
+   432→          lastProduct = data.product;
+   433→          lastCredits = data.remainingCredits;
+   434→          setLoggedUser((prev) => prev ? { ...prev, credits: data.remainingCredits } : prev);
+   435→        } else {
+   436→          toast.error(data.error || 'Erro ao gerar key ' + (i + 1));
+   437→          break;
+   438→        }
+   439→      }
+   440→
+   441→      if (generatedKeys.length > 0) {
+   442→        if (generatedKeys.length === 1) {
+   443→          setDeliveredKey(generatedKeys[0]);
+   444→        } else {
+   445→          setDeliveredKeys(generatedKeys);
+   446→        }
+   447→        setDeliveredProduct(lastProduct);
+   448→        setRemainingCredits(lastCredits);
+   449→        toast.success(`${generatedKeys.length} key${generatedKeys.length > 1 ? 's' : ''} gerada${generatedKeys.length > 1 ? 's' : ''}!`);
+   450→        fetchProducts();
+   451→        fetchUserHistory();
+   452→      }
+   453→    } catch (err) { const msg = err instanceof Error ? err.message : 'Erro de rede'; toast.error(msg); }
+   454→    finally { setBuyingProductId(null); }
+   455→  };
+   456→
+   457→  const copyKey = (key: string) => { navigator.clipboard.writeText(key); setCopiedKey(true); setTimeout(() => setCopiedKey(false), 2000); };
+   458→  const activeProducts = products.filter((p) => p.isActive);
+   459→  const productCategories = [...new Set(activeProducts.map((p) => p.name))];
+   460→  const categoryProducts = selectedCategory ? activeProducts.filter((p) => p.name === selectedCategory) : [];
+   461→  const filteredHistory = historySearch.trim()
+   462→    ? userHistory.filter((h) => h.keyCode.toLowerCase().includes(historySearch.toLowerCase()) || h.productName.toLowerCase().includes(historySearch.toLowerCase()))
+   463→    : userHistory;
+   464→
+   465→  const userNavItems = [
+   466→    { icon: LayoutDashboard, label: 'Dashboard', tab: 'dashboard' },
+   467→    { icon: Key, label: 'Gerar Key', tab: 'generate' },
+   468→    { icon: History, label: 'Historico', tab: 'history' },
+   469→    { icon: Play, label: 'Tutoriais', tab: 'tutorials' },
+   470→    { icon: Link2, label: 'Links', tab: 'links' },
+   471→  ];
+   472→
+   473→  const navItems = isAdmin
+   474→    ? [
+   475→        { group: 'Principal', items: [{ icon: LayoutDashboard, label: 'Dashboard', tab: 'products' }] },
+   476→        { group: 'Estoque', items: [{ icon: Key, label: 'Produtos & Keys', tab: 'products' }, { icon: Package, label: 'Estoque', tab: 'stock' }, { icon: History, label: 'Historico', tab: 'sales' }] },
+   477→        { group: 'Sistema', items: [{ icon: User, label: 'Usuarios', tab: 'users' }, { icon: Play, label: 'Tutoriais', tab: 'tutorials' }, { icon: Link2, label: 'Links', tab: 'links' }] },
+   478→      ]
+   479→    : [];
+   480→
+   481→  return (
+   482→    <div className="min-h-screen flex flex-col bg-[#0a0a0a] text-white relative">
+   483→      <Starfield />
+   484→
+   485→      {/* Sidebar */}
+   486→      <AnimatePresence>
+   487→        {sidebarOpen && (
+   488→          <>
+   489→            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40" onClick={() => setSidebarOpen(false)} />
+   490→            <motion.nav
+   491→              initial={{ x: -280 }} animate={{ x: 0 }} exit={{ x: -280 }}
+   492→              transition={{ type: 'spring', damping: 28, stiffness: 300 }}
+   493→              className="fixed left-0 top-0 bottom-0 w-[260px] z-50 flex flex-col p-4"
+   494→              style={{ background: 'linear-gradient(180deg, rgba(8,8,8,0.78), rgba(4,4,4,0.72))', backdropFilter: 'blur(36px) saturate(180%)', borderRight: '1px solid rgba(255,255,255,0.05)' }}
+   495→            >
+   496→              <div className="flex items-center justify-between mb-6 px-2">
+   497→                <div className="flex items-center gap-3">
+   498→                  <div className="w-8 h-8 rounded-lg bg-white/5 flex items-center justify-center"><Key className="w-4 h-4 text-white/60" /></div>
+   499→                  <span className="text-sm font-semibold tracking-wider text-white">Gerador Magnata</span>
+   500→                </div>
+   501→                <button onClick={() => setSidebarOpen(false)} className="text-white/30 hover:text-white/60 transition-colors"><X className="w-4 h-4" /></button>
+   502→              </div>
+   503→              <div className="flex-1 space-y-6 overflow-y-auto custom-scrollbar">
+   504→                {isAdmin ? (
+   505→                  navItems.map((g) => (
+   506→                    <div key={g.group}>
+   507→                      <p className="text-[10px] uppercase tracking-wider text-white/25 px-2 mb-2">{g.group}</p>
+   508→                      <div className="space-y-1">
+   509→                        {g.items.map((item) => (
+   510→                          <button key={item.tab} onClick={() => { setAdminTab(item.tab); setSidebarOpen(false); }}
+   511→                            className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors ${adminTab === item.tab ? 'bg-white/10 text-white' : 'text-white/50 hover:bg-white/5 hover:text-white/80'}`}>
+   512→                            <item.icon className="w-4 h-4" />{item.label}
+   513→                          </button>
+   514→                        ))}
+   515→                      </div>
+   516→                    </div>
+   517→                  ))
+   518→                ) : (
+   519→                  <div className="space-y-1">
+   520→                    {userNavItems.map((item) => (
+   521→                      <button key={item.tab} onClick={() => { setUserTab(item.tab); setSidebarOpen(false); }}
+   522→                        className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors ${userTab === item.tab ? 'bg-white/10 text-white' : 'text-white/50 hover:bg-white/5 hover:text-white/80'}`}>
+   523→                        <item.icon className="w-4 h-4" />{item.label}
+   524→                      </button>
+   525→                    ))}
+   526→                  </div>
+   527→                )}
+   528→              </div>
+   529→              <Separator className="bg-white/5 my-4" />
+   530→              {isAdmin ? (
+   531→                <button onClick={() => { setIsAdmin(false); setSidebarOpen(false); }} className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-white/50 hover:bg-white/5 hover:text-white/80 transition-colors">
+   532→                  <Store className="w-4 h-4" />Ver Loja
+   533→                </button>
+   534→              ) : (
+   535→                <button onClick={() => { setShowAdminLogin(true); setSidebarOpen(false); }} className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-white/50 hover:bg-white/5 hover:text-white/80 transition-colors">
+   536→                  <Lock className="w-4 h-4" />Admin
+   537→                </button>
+   538→              )}
+   539→            </motion.nav>
+   540→          </>
+   541→        )}
+   542→      </AnimatePresence>
+   543→
+   544→      {/* Header */}
+   545→      <header className="glass-nav h-14 sticky top-0 z-30 flex items-center justify-between px-4">
+   546→        <div className="flex items-center gap-3">
+   547→          <button onClick={() => setSidebarOpen(true)} className="text-white/50 hover:text-white/80 transition-colors">
+   548→            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="3" y1="6" x2="21" y2="6" /><line x1="3" y1="12" x2="21" y2="12" /><line x1="3" y1="18" x2="21" y2="18" /></svg>
+   549→          </button>
+   550→          <div className="flex items-center gap-2.5">
+   551→            <div className="w-7 h-7 rounded-lg bg-white/5 flex items-center justify-center border border-white/10"><Key className="w-3.5 h-3.5 text-white/60" /></div>
+   552→            <span className="text-sm font-bold tracking-wider text-white/90">Gerador Magnata</span>
+   553→          </div>
+   554→        </div>
+   555→        <div className="flex items-center gap-2">
+   556→          {isAdmin ? (
+   557→            <>
+   558→              <Button variant="ghost" size="sm" onClick={() => setIsAdmin(false)} className="text-white/50 hover:text-white/80 hover:bg-white/5 text-xs tracking-wider"><Store className="w-4 h-4 mr-1.5" />LOJA</Button>
+   559→              <Button variant="ghost" size="sm" onClick={() => { setIsAdmin(false); }} className="text-white/50 hover:text-white/80 hover:bg-white/5 text-xs tracking-wider"><LogOut className="w-4 h-4 mr-1.5" />SAIR</Button>
+   560→            </>
+   561→          ) : loggedUser ? (
+   562→            <div className="flex items-center gap-3">
+   563→              <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white/5">
+   564→                <Wallet className="w-3.5 h-3.5 text-amber-400" />
+   565→                <span className="text-xs font-semibold text-amber-400">{loggedUser.credits}</span>
+   566→                <span className="text-[10px] text-white/30">créditos</span>
+   567→              </div>
+   568→              <span className="text-xs text-white/60 hidden sm:inline">{loggedUser.displayName}</span>
+   569→              <Button variant="ghost" size="sm" onClick={handleUserLogout} className="text-white/50 hover:text-red-400 hover:bg-white/5 text-xs"><LogOut className="w-4 h-4" /></Button>
+   570→            </div>
+   571→          ) : (
+   572→            <>
+   573→              <Button variant="ghost" size="sm" onClick={() => setShowUserLogin(true)} className="text-white/50 hover:text-white/80 hover:bg-white/5 text-xs tracking-wider"><LogIn className="w-4 h-4 mr-1.5" />LOGIN</Button>
+   574→              <Button variant="ghost" size="sm" onClick={() => setShowAdminLogin(true)} className="text-white/50 hover:text-white/80 hover:bg-white/5 text-xs tracking-wider"><Lock className="w-4 h-4 mr-1.5" />ADMIN</Button>
+   575→            </>
+   576→          )}
+   577→        </div>
+   578→      </header>
+   579→
+   580→      {/* Main */}
+   581→      <main className="flex-1 relative z-10 max-w-7xl mx-auto w-full p-4 md:p-6">
+   582→        <AnimatePresence mode="wait">
+   583→          {!isAdmin ? (
+   584→            /* ====== STORE VIEW ====== */
+   585→            <motion.div key="store" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -12 }} transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}>
+   586→              {deliveredKey || deliveredKeys.length > 0 ? (
+   587→                <div className="max-w-lg mx-auto mt-8">
+   588→                  <div className="glass-strong rounded-xl p-8 text-center space-y-5">
+   589→                    <motion.div initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={{ delay: 0.1 }}>
+   590→                      <div className="w-16 h-16 rounded-2xl bg-emerald-500/10 flex items-center justify-center mx-auto mb-4"><Shield className="w-8 h-8 text-emerald-400" /></div>
+   591→                      <h2 className="text-lg font-bold tracking-wider text-white">{deliveredKeys.length > 1 ? `${deliveredKeys.length} Keys Geradas` : 'Key Gerada'}</h2>
+   592→                      <p className="text-sm text-white/50 mt-1">{deliveredProduct}</p>
+   593→                    </motion.div>
+   594→                    <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.25 }}>
+   595→                      {deliveredKeys.length > 0 ? (
+   596→                        <div className="space-y-2 text-left">
+   597→                          {deliveredKeys.map((k, i) => (
+   598→                            <div key={i} className="glass-input rounded-xl p-3 flex items-center justify-between gap-2">
+   599→                              <div className="flex items-center gap-2 min-w-0">
+   600→                                <span className="text-[10px] text-white/20 shrink-0">#{i + 1}</span>
+   601→                                <code className="text-emerald-400 font-mono text-xs break-all">{k}</code>
+   602→                              </div>
+   603→                              <Button size="sm" variant="ghost" onClick={() => copyKey(k)} className="text-white/30 hover:text-white/60 shrink-0">
+   604→                                {copiedKey ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+   605→                              </Button>
+   606→                            </div>
+   607→                          ))}
+   608→                          <button onClick={() => { navigator.clipboard.writeText(deliveredKeys.join('\n')); toast.success('Todas as keys copiadas!'); }} className="w-full mt-2 py-2 rounded-lg bg-white/5 hover:bg-white/10 text-white/50 text-[11px] tracking-wider transition-colors">COPIAR TODAS</button>
+   609→                        </div>
+   610→                      ) : deliveredKey ? (
+   611→                        <div className="glass-input rounded-xl p-4 flex items-center justify-between gap-3">
+   612→                          <code className="text-emerald-400 font-mono text-sm break-all text-left">{deliveredKey}</code>
+   613→                          <Button size="sm" variant="ghost" onClick={() => copyKey(deliveredKey)} className="text-white/30 hover:text-white/60 shrink-0">
+   614→                            {copiedKey ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
+   615→                          </Button>
+   616→                        </div>
+   617→                      ) : null}
+   618→                      <p className="text-[11px] text-white/20 mt-3">Copie sua{deliveredKeys.length > 1 ? 's' : ''} key{deliveredKeys.length > 1 ? 's' : ''} agora. Ela{deliveredKeys.length > 1 ? 's' : ''} nao sera{deliveredKeys.length === 1 ? '' : 'o'} exibida{deliveredKeys.length === 1 ? '' : 's'} novamente.</p>
+   619→                      <p className="text-[11px] text-amber-400/60 mt-1">Créditos restantes: {remainingCredits}</p>
+   620→                    </motion.div>
+   621→                    <Button variant="ghost" onClick={() => { setDeliveredKey(null); setDeliveredKeys([]); refreshUser(); }} className="text-white/40 hover:text-white/70 hover:bg-white/5 text-xs tracking-wider">COMPRAR OUTRA</Button>
+   622→                  </div>
+   623→                </div>
+   624→              ) : userTab === 'dashboard' ? (
+   625→                <div>
+   626→                  {loggedUser ? (
+   627→                    <>
+   628→                      <div className="mb-6">
+   629→                        <h1 className="text-xl font-bold tracking-wider text-white">
+   630→                          {new Date().getHours() < 12 ? 'Bom dia' : new Date().getHours() < 18 ? 'Boa tarde' : 'Boa noite'}, {loggedUser.displayName}!
+   631→                        </h1>
+   632→                        <p className="text-sm text-white/40 mt-1">Bem-vindo ao Gerador Magnata</p>
+   633→                      </div>
+   634→                      <div className="grid grid-cols-2 gap-3 mb-6">
+   635→                        <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }}>
+   636→                          <div className="glass rounded-xl p-4">
+   637→                            <div className="flex items-center gap-2 mb-2"><Wallet className="w-4 h-4 text-amber-400" /><span className="text-[10px] uppercase tracking-wider text-white/30">Saldo Atual</span></div>
+   638→                            <p className="text-2xl font-bold text-amber-400">{loggedUser.credits}</p>
+   639→                            <p className="text-[11px] text-white/20 mt-1">creditos disponiveis</p>
+   640→                          </div>
+   641→                        </motion.div>
+   642→                        <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
+   643→                          <div className="glass rounded-xl p-4">
+   644→                            <div className="flex items-center gap-2 mb-2"><Key className="w-4 h-4 text-emerald-400" /><span className="text-[10px] uppercase tracking-wider text-white/30">Keys Geradas</span></div>
+   645→                            <p className="text-2xl font-bold text-white">{userTotalKeys}</p>
+   646→                            <p className="text-[11px] text-white/20 mt-1">{userTotalCreditsUsed} creditos utilizados</p>
+   647→                          </div>
+   648→                        </motion.div>
+   649→                      </div>
+   650→                      <div className="glass rounded-xl p-5">
+   651→                        <h3 className="text-sm font-semibold tracking-wider text-white mb-4 flex items-center gap-2"><Package className="w-4 h-4 text-white/40" />Estoque Disponivel</h3>
+   652→                        {activeProducts.length === 0 ? (
+   653→                          <p className="text-sm text-white/30 text-center py-4">Nenhum produto.</p>
+   654→                        ) : (
+   655→                          <div className="space-y-2">
+   656→                            {activeProducts.map((p) => (
+   657→                              <div key={p.id} className="flex items-center justify-between p-3 rounded-lg bg-white/[0.02]">
+   658→                                <div>
+   659→                                  <span className="text-sm font-medium text-white">{p.name}</span>
+   660→                                  <span className="text-[11px] text-white/30 ml-2">{p.duration}</span>
+   661→                                </div>
+   662→                                <div className="flex items-center gap-2">
+   663→                                  <span className="text-[11px] text-white/40">{p.credits} cr.</span>
+   664→                                  <Badge className={`text-[10px] ${p._count.keys > 0 ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'bg-red-500/10 text-red-400 border-red-500/20'}`}>{p._count.keys} disp.</Badge>
+   665→                                </div>
+   666→                              </div>
+   667→                            ))}
+   668→                          </div>
+   669→                        )}
+   670→                      </div>
+   671→                    </>
+   672→                  ) : (
+   673→                    <div className="glass rounded-xl p-12 text-center">
+   674→                      <Lock className="w-10 h-10 text-white/10 mx-auto mb-3" />
+   675→                      <p className="text-sm text-white/30 mb-4">Faca login para ver seu dashboard.</p>
+   676→                      <button onClick={() => setShowUserLogin(true)} className="h-10 px-6 rounded-xl bg-white text-black text-xs font-medium tracking-wider hover:bg-white/90 transition-colors">FAZER LOGIN</button>
+   677→                    </div>
+   678→                  )}
+   679→                </div>
+   680→              ) : userTab === 'generate' ? (
+   681→                <>
+   682→                  <div className="flex items-center gap-3 mb-6">
+   683→                    <Key className="w-5 h-5 text-white/40" />
+   684→                    <h1 className="text-xl font-bold tracking-wider text-white">Gerar Keys</h1>
+   685→                  </div>
+   686→                  {loadingProducts ? (
+   687→                    <div className="glass rounded-xl p-6 space-y-4"><div className="skeleton-shimmer h-5 w-48 rounded-lg" /><div className="skeleton-shimmer h-12 w-full rounded-xl" /><div className="skeleton-shimmer h-12 w-full rounded-xl" /></div>
+   688→                  ) : activeProducts.length === 0 ? (
+   689→                    <div className="glass rounded-xl p-12 text-center"><Package className="w-10 h-10 text-white/10 mx-auto mb-3" /><p className="text-sm text-white/30">Nenhum produto disponivel.</p></div>
+   690→                  ) : !loggedUser ? (
+   691→                    <div className="glass rounded-xl p-12 text-center">
+   692→                      <Lock className="w-10 h-10 text-white/10 mx-auto mb-3" />
+   693→                      <p className="text-sm text-white/30 mb-4">Faca login para gerar keys.</p>
+   694→                      <button onClick={() => setShowUserLogin(true)} className="h-10 px-6 rounded-xl bg-white text-black text-xs font-medium tracking-wider hover:bg-white/90 transition-colors">FAZER LOGIN</button>
+   695→                    </div>
+   696→                  ) : (
+   697→                    <div className="glass rounded-xl p-5 space-y-4 max-w-md">
+   698→                      {/* Dropdown 1: Selecionar Produto */}
+   699→                      <div>
+   700→                        <label className="text-[11px] uppercase tracking-wider text-white/30 mb-2 block">Selecionar Produto</label>
+   701→                        <select
+   702→                          value={selectedCategory}
+   703→                          onChange={(e) => { setSelectedCategory(e.target.value); setSelectedProductId(''); setGenerateQuantity(1); }}
+   704→                          className="glass-input w-full rounded-xl px-4 py-3 text-sm text-white bg-transparent"
+   705→                        >
+   706→                          <option value="">Selecione...</option>
+   707→                          {productCategories.map((cat) => (
+   708→                            <option key={cat} value={cat}>{cat}</option>
+   709→                          ))}
+   710→                        </select>
+   711→                      </div>
+   712→
+   713→                      {/* Dropdown 2: Selecionar Tipo da Key */}
+   714→                      {selectedCategory && (
+   715→                        <div>
+   716→                          <label className="text-[11px] uppercase tracking-wider text-white/30 mb-2 block">Selecionar Tipo da Key</label>
+   717→                          <select
+   718→                            value={selectedProductId}
+   719→                            onChange={(e) => { setSelectedProductId(e.target.value); setGenerateQuantity(1); }}
+   720→                            className="glass-input w-full rounded-xl px-4 py-3 text-sm text-white bg-transparent"
+   721→                          >
+   722→                            <option value="">Selecione</option>
+   723→                            {categoryProducts.map((p) => (
+   724→                              <option key={p.id} value={p.id} disabled={p._count.keys === 0}>
+   725→                                Key {p.duration} ({p.credits} cr.) {p._count.keys === 0 ? '— ESGOTADO' : `— ${p._count.keys} disp.`}
+   726→                              </option>
+   727→                            ))}
+   728→                          </select>
+   729→                        </div>
+   730→                      )}
+   731→
+   732→                      {/* Product details + quantity */}
+   733→                      {selectedProductId && (() => {
+   734→                        const prod = activeProducts.find((p) => p.id === selectedProductId);
+   735→                        if (!prod) return null;
+   736→                        const totalCost = prod.credits * generateQuantity;
+   737→                        const maxQty = Math.min(Math.floor(loggedUser.credits / prod.credits), prod._count.keys);
+   738→                        return (
+   739→                          <div className="space-y-3 px-1">
+   740→                            <div className="space-y-2">
+   741→                              <div className="flex justify-between text-xs"><span className="text-white/40">Estoque</span><span className={prod._count.keys > 0 ? 'text-white/80' : 'text-red-400'}>{prod._count.keys} disponiveis</span></div>
+   742→                              <div className="flex justify-between text-xs"><span className="text-white/40">Seus creditos</span><span className={loggedUser.credits >= prod.credits ? 'text-amber-400 font-semibold' : 'text-red-400 font-semibold'}>{loggedUser.credits} cr.</span></div>
+   743→                            </div>
+   744→                            <div className="pt-2 border-t border-white/5">
+   745→                              <label className="text-[11px] uppercase tracking-wider text-white/30 mb-2 block">Quantidade de keys</label>
+   746→                              <div className="flex items-center gap-3">
+   747→                                <button
+   748→                                  onClick={() => setGenerateQuantity((q) => Math.max(1, q - 1))}
+   749→                                  className="w-10 h-10 rounded-xl bg-white/5 hover:bg-white/10 text-white/60 flex items-center justify-center text-lg font-medium transition-colors"
+   750→                                >-</button>
+   751→                                <input
+   752→                                  type="number"
+   753→                                  min={1}
+   754→                                  max={maxQty || 1}
+   755→                                  value={generateQuantity}
+   756→                                  onChange={(e) => { const v = Math.max(1, Math.min(maxQty || 1, Number(e.target.value) || 1)); setGenerateQuantity(v); }}
+   757→                                  className="glass-input w-20 rounded-xl px-3 py-2.5 text-sm text-white text-center font-semibold"
+   758→                                />
+   759→                                <button
+   760→                                  onClick={() => setGenerateQuantity((q) => Math.min(maxQty || 1, q + 1))}
+   761→                                  className="w-10 h-10 rounded-xl bg-white/5 hover:bg-white/10 text-white/60 flex items-center justify-center text-lg font-medium transition-colors"
+   762→                                >+</button>
+   763→                              </div>
+   764→                              <p className="text-[11px] text-white/20 mt-1.5">Max: {maxQty} key{maxQty !== 1 ? 's' : ''} | Total: <span className="text-emerald-400/70">{totalCost} cr.</span></p>
+   765→                            </div>
+   766→                          </div>
+   767→                        );
+   768→                      })()}
+   769→                      <button
+   770→                        disabled={!selectedProductId || buyingProductId === selectedProductId || (() => { const p = activeProducts.find((p) => p.id === selectedProductId); return p ? (p._count.keys === 0 || loggedUser.credits < p.credits * generateQuantity) : true; })()}
+   771→                        onClick={() => selectedProductId && handleBuy(selectedProductId, generateQuantity)}
+   772→                        className="w-full h-11 rounded-xl bg-white text-black text-xs font-medium tracking-wider hover:bg-white/90 transition-colors disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+   773→                      >
+   774→                        {buyingProductId === selectedProductId ? (<><RefreshCw className="w-4 h-4 animate-spin" /> Gerando {generateQuantity > 1 ? `${generateQuantity} keys...` : '...'}</>) : (<><Key className="w-4 h-4" /> GERAR {generateQuantity > 1 ? `${generateQuantity} KEYS` : 'KEYS'}</>)}
+   775→                      </button>
+   776→                    </div>
+   777→                  )}
+   778→                </>
+   779→              ) : userTab === 'history' ? (
+   780→                <div>
+   781→                  <div className="flex items-center gap-3 mb-4">
+   782→                    <History className="w-5 h-5 text-white/40" />
+   783→                    <h1 className="text-xl font-bold tracking-wider text-white">Historico de Keys</h1>
+   784→                  </div>
+   785→                  <p className="text-sm text-white/30 mb-4">Visualize todas as suas keys geradas</p>
+   786→                  {!loggedUser ? (
+   787→                    <div className="glass rounded-xl p-12 text-center">
+   788→                      <Lock className="w-10 h-10 text-white/10 mx-auto mb-3" />
+   789→                      <p className="text-sm text-white/30 mb-4">Faca login para ver seu historico.</p>
+   790→                      <button onClick={() => setShowUserLogin(true)} className="h-10 px-6 rounded-xl bg-white text-black text-xs font-medium tracking-wider hover:bg-white/90 transition-colors">FAZER LOGIN</button>
+   791→                    </div>
+   792→                  ) : (
+   793→                    <div className="glass rounded-xl p-5">
+   794→                      <div className="flex items-center gap-2 mb-4">
+   795→                        <input
+   796→                          placeholder="Buscar por key..."
+   797→                          value={historySearch}
+   798→                          onChange={(e) => setHistorySearch(e.target.value)}
+   799→                          className="glass-input flex-1 rounded-xl px-4 py-2.5 text-sm text-white placeholder:text-white/20"
+   800→                        />
+   801→                        <button onClick={fetchUserHistory} className="text-white/30 hover:text-white/60 transition-colors p-2"><RefreshCw className="w-4 h-4" /></button>
+   802→                      </div>
+   803→                      <p className="text-[11px] text-white/20 mb-3">{filteredHistory.length} registro{filteredHistory.length !== 1 ? 's' : ''}</p>
+   804→                      <div className="max-h-[500px] overflow-y-auto custom-scrollbar space-y-1">
+   805→                        {filteredHistory.length === 0 ? (
+   806→                          <div className="text-center py-8"><History className="w-8 h-8 text-white/10 mx-auto mb-2" /><p className="text-sm text-white/20">{historySearch ? 'Nenhum resultado.' : 'Nenhuma key gerada.'}</p></div>
+   807→                        ) : filteredHistory.map((h) => (
+   808→                          <div key={h.id} className="flex items-center justify-between p-3 rounded-lg bg-white/[0.02]">
+   809→                            <div className="flex-1 min-w-0">
+   810→                              <div className="flex items-center gap-2">
+   811→                                <code className="text-xs font-mono text-emerald-400/80 truncate">{h.keyCode}</code>
+   812→                              </div>
+   813→                              <div className="flex items-center gap-3 mt-1 text-[11px] text-white/30">
+   814→                                <span>{h.productName}</span>
+   815→                                <span className="text-amber-400/60">{h.credits} cr.</span>
+   816→                                <span>{new Date(h.createdAt).toLocaleString('pt-BR')}</span>
+   817→                              </div>
+   818→                            </div>
+   819→                            <button onClick={() => { navigator.clipboard.writeText(h.keyCode); toast.success('Key copiada!'); }} className="text-white/20 hover:text-white/60 transition-colors p-1.5 shrink-0">
+   820→                              <Copy className="w-3.5 h-3.5" />
+   821→                            </button>
+   822→                          </div>
+   823→                        ))}
+   824→                      </div>
+   825→                    </div>
+   826→                  )}
+   827→                </div>
+   828→              ) : userTab === 'tutorials' ? (
+   829→                <div>
+   830→                  <div className="flex items-center gap-3 mb-6">
+   831→                    <Play className="w-5 h-5 text-white/40" />
+   832→                    <h1 className="text-xl font-bold tracking-wider text-white">Tutoriais</h1>
+   833→                  </div>
+   834→                  {userTutorials.length === 0 ? (
+   835→                    <div className="glass rounded-xl p-12 text-center"><Play className="w-10 h-10 text-white/10 mx-auto mb-3" /><p className="text-sm text-white/30">Nenhum tutorial disponivel.</p></div>
+   836→                  ) : (
+   837→                    <div className="space-y-4">
+   838→                      {userTutorials.map((t) => (
+   839→                        <motion.div key={t.id} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }} className="glass rounded-xl overflow-hidden">
+   840→                          <p className="text-sm font-semibold text-white px-5 pt-4 pb-2">{t.title}</p>
+   841→                          <div className="relative w-full" style={{ paddingBottom: '56.25%' }}>
+   842→                            <iframe
+   843→                              src={t.embedUrl}
+   844→                              title={t.title}
+   845→                              className="absolute inset-0 w-full h-full"
+   846→                              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+   847→                              allowFullScreen
+   848→                            />
+   849→                          </div>
+   850→                        </motion.div>
+   851→                      ))}
+   852→                    </div>
+   853→                  )}
+   854→                </div>
+   855→              ) : userTab === 'links' ? (
+   856→                <div>
+   857→                  <div className="flex items-center gap-3 mb-6">
+   858→                    <Link2 className="w-5 h-5 text-white/40" />
+   859→                    <h1 className="text-xl font-bold tracking-wider text-white">Links</h1>
+   860→                  </div>
+   861→                  {userLinks.length === 0 ? (
+   862→                    <div className="glass rounded-xl p-12 text-center"><Link2 className="w-10 h-10 text-white/10 mx-auto mb-3" /><p className="text-sm text-white/30">Nenhum link disponivel.</p></div>
+   863→                  ) : (
+   864→                    <div className="space-y-3">
+   865→                      {userLinks.map((lnk, i) => (
+   866→                        <motion.a
+   867→                          key={lnk.id}
+   868→                          href={lnk.url}
+   869→                          target="_blank"
+   870→                          rel="noopener noreferrer"
+   871→                          initial={{ opacity: 0, y: 8 }}
+   872→                          animate={{ opacity: 1, y: 0 }}
+   873→                          transition={{ delay: i * 0.05, duration: 0.3 }}
+   874→                          className="glass glass-hover rounded-xl p-4 flex items-center gap-4 group cursor-pointer block"
+   875→                        >
+   876→                          <div className="w-10 h-10 rounded-xl bg-white/5 flex items-center justify-center shrink-0 group-hover:bg-white/10 transition-colors">
+   877→                            <ExternalLink className="w-4 h-4 text-white/40 group-hover:text-white/70 transition-colors" />
+   878→                          </div>
+   879→                          <div className="flex-1 min-w-0">
+   880→                            <p className="text-sm font-semibold text-white group-hover:text-white/90 transition-colors">{lnk.title}</p>
+   881→                            {lnk.description && <p className="text-xs text-white/30 mt-0.5 truncate">{lnk.description}</p>}
+   882→                            <p className="text-[11px] text-white/15 mt-1 truncate">{lnk.url}</p>
+   883→                          </div>
+   884→                          <ArrowRight className="w-4 h-4 text-white/20 group-hover:text-white/50 group-hover:translate-x-0.5 transition-all shrink-0" />
+   885→                        </motion.a>
+   886→                      ))}
+   887→                    </div>
+   888→                  )}
+   889→                </div>
+   890→              ) : null}
+   891→            </motion.div>
+   892→          ) : (
+   893→            /* ====== ADMIN VIEW ====== */
+   894→            <motion.div key="admin" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -12 }} transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}>
+   895→              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
+   896→                {[
+   897→                  { label: 'Produtos Ativos', value: activeProducts.length, color: 'text-white' },
+   898→                  { label: 'Keys em Estoque', value: activeProducts.reduce((s, p) => s + p._count.keys, 0), color: 'text-emerald-400' },
+   899→                  { label: 'Vendas Totais', value: stats.totalSales, color: 'text-white' },
+   900→                  { label: 'Usuarios', value: users.length, color: 'text-blue-400' },
+   901→                ].map((s, i) => (
+   902→                  <motion.div key={s.label} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }}>
+   903→                    <div className="glass rounded-xl p-4"><p className="text-[10px] uppercase tracking-wider text-white/30">{s.label}</p><p className={`text-2xl font-bold mt-1 ${s.color}`}>{s.value}</p></div>
+   904→                  </motion.div>
+   905→                ))}
+   906→              </div>
+   907→
+   908→              <Tabs value={adminTab} onValueChange={setAdminTab}>
+   909→                <TabsList className="bg-white/[0.03] border border-white/[0.06] rounded-xl p-1 mb-4 w-full sm:w-auto flex-wrap">
+   910→                  {[
+   911→                    { value: 'products', icon: Key, label: 'Produtos' },
+   912→                    { value: 'stock', icon: Package, label: 'Estoque' },
+   913→                    { value: 'sales', icon: History, label: 'Historico' },
+   914→                    { value: 'users', icon: User, label: 'Usuarios' },
+   915→                    { value: 'tutorials', icon: Play, label: 'Tutoriais' },
+   916→                    { value: 'links', icon: Link2, label: 'Links' },
+   917→                  ].map((t) => (
+   918→                    <TabsTrigger key={t.value} value={t.value} className="data-[state=active]:bg-white/10 data-[state=active]:text-white text-white/40 rounded-lg text-xs tracking-wider gap-1.5">
+   919→                      <t.icon className="w-3.5 h-3.5" />{t.label}
+   920→                    </TabsTrigger>
+   921→                  ))}
+   922→                </TabsList>
+   923→
+   924→                {/* Products Tab */}
+   925→                <TabsContent value="products" className="space-y-3 mt-0">
+   926→                  <div className="glass rounded-xl p-5">
+   927→                    <h3 className="text-sm font-semibold tracking-wider text-white mb-4 flex items-center gap-2"><Plus className="w-4 h-4 text-white/40" />Novo Produto</h3>
+   928→                    <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+   929→                      <input placeholder="Nome" value={newProduct.name} onChange={(e) => setNewProduct({ ...newProduct, name: e.target.value })} className="glass-input rounded-xl px-4 py-2.5 text-sm text-white placeholder:text-white/20" />
+   930→                      <input placeholder="Duracao (1 dia)" value={newProduct.duration} onChange={(e) => setNewProduct({ ...newProduct, duration: e.target.value })} className="glass-input rounded-xl px-4 py-2.5 text-sm text-white placeholder:text-white/20" />
+   931→                      <input type="number" placeholder="Creditos" value={newProduct.credits} onChange={(e) => setNewProduct({ ...newProduct, credits: e.target.value })} className="glass-input rounded-xl px-4 py-2.5 text-sm text-white placeholder:text-white/20" />
+   932→                      <button onClick={handleCreateProduct} className="h-10 rounded-xl bg-white text-black text-xs font-medium tracking-wider hover:bg-white/90 transition-colors flex items-center justify-center gap-1.5"><Plus className="w-3.5 h-3.5" />CRIAR</button>
+   933→                    </div>
+   934→                  </div>
+   935→                  <div className="glass rounded-xl p-5">
+   936→                    <h3 className="text-sm font-semibold tracking-wider text-white mb-4">Produtos Cadastrados</h3>
+   937→                    <div className="max-h-80 overflow-y-auto custom-scrollbar space-y-2">
+   938→                      {products.length === 0 ? (<p className="text-sm text-white/30 text-center py-6">Nenhum produto.</p>) : products.map((p) => (
+   939→                        <div key={p.id} className="flex items-center justify-between p-3 rounded-lg bg-white/[0.02] hover:bg-white/[0.04] transition-colors">
+   940→                          <div className="flex-1 min-w-0">
+   941→                            <div className="flex items-center gap-2"><span className="text-sm font-medium text-white truncate">{p.name}</span>{!p.isActive && <Badge className="bg-red-500/10 text-red-400 border-red-500/20 text-[10px]">Inativo</Badge>}</div>
+   942→                            <div className="flex items-center gap-3 mt-1 text-[11px] text-white/40"><span>{p.duration}</span><span className="text-emerald-400">{p.credits} cr.</span><span className={p._count.keys > 0 ? 'text-emerald-400' : 'text-red-400'}>{p._count.keys} keys</span></div>
+   943→                          </div>
+   944→                          <button onClick={() => handleDeleteProduct(p.id, p.name)} className="text-white/20 hover:text-red-400 transition-colors p-1"><Trash2 className="w-4 h-4" /></button>
+   945→                        </div>
+   946→                      ))}
+   947→                    </div>
+   948→                  </div>
+   949→                </TabsContent>
+   950→
+   951→                {/* Stock Tab */}
+   952→                <TabsContent value="stock" className="space-y-3 mt-0">
+   953→                  <div className="glass rounded-xl p-5">
+   954→                    <h3 className="text-sm font-semibold tracking-wider text-white mb-1 flex items-center gap-2"><Plus className="w-4 h-4 text-white/40" />Adicionar Keys</h3>
+   955→                    <p className="text-[11px] text-white/25 mb-4">Cole uma key por linha</p>
+   956→                    <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+   957→                      <select value={addingKeysTo} onChange={(e) => setAddingKeysTo(e.target.value)} className="glass-input rounded-xl px-4 py-2.5 text-sm text-white/80">
+   958→                        <option value="">Selecione...</option>
+   959→                        {products.filter((p) => p.isActive).map((p) => (<option key={p.id} value={p.id}>{p.name} ({p.credits} cr.)</option>))}
+   960→                      </select>
+   961→                      <div className="sm:col-span-2"><Textarea value={newKeysText} onChange={(e) => setNewKeysText(e.target.value)} rows={3} placeholder="Cole as keys aqui..." className="glass-input rounded-xl px-4 py-2.5 text-sm text-white font-mono placeholder:text-white/15 resize-none min-h-[88px]" /></div>
+   962→                      <button onClick={handleAddKeys} disabled={!addingKeysTo || !newKeysText.trim()} className="h-auto rounded-xl bg-white text-black text-xs font-medium tracking-wider hover:bg-white/90 transition-colors disabled:opacity-30 flex items-center justify-center gap-1.5 py-3"><Plus className="w-3.5 h-3.5" />ADICIONAR</button>
+   963→                    </div>
+   964→                  </div>
+   965→                  <div className="glass rounded-xl p-5">
+   966→                    <div className="flex items-center justify-between mb-4">
+   967→                      <h3 className="text-sm font-semibold tracking-wider text-white">Keys Cadastradas</h3>
+   968→                      <div className="flex gap-2 items-center">
+   969→                        <select value={selectedProductId} onChange={(e) => { setSelectedProductId(e.target.value); fetchKeys(e.target.value || undefined); }} className="glass-input rounded-lg px-2 py-1 text-[11px] text-white/60"><option value="">Todos</option>{products.map((p) => (<option key={p.id} value={p.id}>{p.name}</option>))}</select>
+   970→                        <button onClick={() => fetchKeys(selectedProductId || undefined)} className="text-white/30 hover:text-white/60 transition-colors"><RefreshCw className="w-3.5 h-3.5" /></button>
+   971→                      </div>
+   972→                    </div>
+   973→                    <div className="max-h-96 overflow-y-auto custom-scrollbar space-y-1">
+   974→                      {keys.length === 0 ? (<div className="text-center py-8"><Hash className="w-8 h-8 text-white/10 mx-auto mb-2" /><p className="text-sm text-white/20">Nenhuma key.</p></div>) : keys.map((k) => (
+   975→                        <div key={k.id} className={`flex items-center justify-between p-2.5 rounded-lg ${k.isSold ? 'opacity-40' : 'bg-white/[0.02]'}`}>
+   976→                          <div className="flex-1 min-w-0">
+   977→                            <div className="flex items-center gap-2"><code className="text-xs font-mono text-white/80 truncate">{k.code}</code>{k.isSold ? <Badge className="bg-red-500/10 text-red-400 border-red-500/20 text-[10px]">Vendida</Badge> : <Badge className="bg-emerald-500/10 text-emerald-400 border-emerald-500/20 text-[10px]">Disponivel</Badge>}</div>
+   978→                            <p className="text-[10px] text-white/25 mt-0.5">{k.product.name} — {k.product.duration}</p>
+   979→                          </div>
+   980→                          {!k.isSold && <button onClick={() => handleDeleteKey(k.id)} className="text-white/20 hover:text-red-400 transition-colors p-1"><Trash2 className="w-3.5 h-3.5" /></button>}
+   981→                        </div>
+   982→                      ))}
+   983→                    </div>
+   984→                  </div>
+   985→                </TabsContent>
+   986→
+   987→                {/* Sales Tab */}
+   988→                <TabsContent value="sales" className="mt-0">
+   989→                  <div className="glass rounded-xl p-5">
+   990→                    <div className="flex items-center justify-between mb-4">
+   991→                      <h3 className="text-sm font-semibold tracking-wider text-white flex items-center gap-2"><BarChart3 className="w-4 h-4 text-white/40" />Historico de Vendas</h3>
+   992→                      <button onClick={fetchTransactions} className="text-white/30 hover:text-white/60 transition-colors"><RefreshCw className="w-3.5 h-3.5" /></button>
+   993→                    </div>
+   994→                    <div className="max-h-96 overflow-y-auto custom-scrollbar space-y-1">
+   995→                      {transactions.length === 0 ? (<div className="text-center py-8"><History className="w-8 h-8 text-white/10 mx-auto mb-2" /><p className="text-sm text-white/20">Nenhuma venda.</p></div>) : transactions.map((t) => (
+   996→                        <div key={t.id} className="flex items-center justify-between p-3 rounded-lg bg-white/[0.02]">
+   997→                          <div className="flex-1 min-w-0">
+   998→                            <div className="flex items-center gap-2"><span className="text-sm font-medium text-white">{t.productName}</span><Badge className="bg-amber-500/10 text-amber-400 border-amber-500/20 text-[10px]">{t.credits} cr.</Badge></div>
+   999→                            <div className="flex items-center gap-3 mt-1 text-[11px] text-white/30"><span>{t.buyerInfo}</span><code className="text-emerald-400/70 font-mono">{t.key.code}</code></div>
+  1000→                          </div>
+  1001→                          <span className="text-[11px] text-white/20 shrink-0 ml-3">{new Date(t.createdAt).toLocaleString('pt-BR')}</span>
+  1002→                        </div>
+  1003→                      ))}
+  1004→                    </div>
+  1005→                  </div>
+  1006→                </TabsContent>
+  1007→
+  1008→                {/* Users Tab */}
+  1009→                <TabsContent value="users" className="space-y-3 mt-0">
+  1010→                  <div className="glass rounded-xl p-5">
+  1011→                    <h3 className="text-sm font-semibold tracking-wider text-white mb-4 flex items-center gap-2"><UserPlus className="w-4 h-4 text-white/40" />Novo Usuario</h3>
+  1012→                    <div className="grid grid-cols-1 sm:grid-cols-5 gap-3">
+  1013→                      <input placeholder="Usuario" value={newUser.username} onChange={(e) => setNewUser({ ...newUser, username: e.target.value })} className="glass-input rounded-xl px-4 py-2.5 text-sm text-white placeholder:text-white/20" />
+  1014→                      <input type="password" placeholder="Senha" value={newUser.password} onChange={(e) => setNewUser({ ...newUser, password: e.target.value })} className="glass-input rounded-xl px-4 py-2.5 text-sm text-white placeholder:text-white/20" />
+  1015→                      <input placeholder="Nome visivel" value={newUser.displayName} onChange={(e) => setNewUser({ ...newUser, displayName: e.target.value })} className="glass-input rounded-xl px-4 py-2.5 text-sm text-white placeholder:text-white/20" />
+  1016→                      <input type="number" placeholder="Creditos" value={newUser.credits} onChange={(e) => setNewUser({ ...newUser, credits: e.target.value })} className="glass-input rounded-xl px-4 py-2.5 text-sm text-white placeholder:text-white/20" />
+  1017→                      <button onClick={handleCreateUser} className="h-10 rounded-xl bg-white text-black text-xs font-medium tracking-wider hover:bg-white/90 transition-colors flex items-center justify-center gap-1.5"><UserPlus className="w-3.5 h-3.5" />CRIAR</button>
+  1018→                    </div>
+  1019→                  </div>
+  1020→                  <div className="glass rounded-xl p-5">
+  1021→                    <div className="flex items-center justify-between mb-4">
+  1022→                      <h3 className="text-sm font-semibold tracking-wider text-white">Usuarios Cadastrados</h3>
+  1023→                      <button onClick={fetchUsers} className="text-white/30 hover:text-white/60 transition-colors"><RefreshCw className="w-3.5 h-3.5" /></button>
+  1024→                    </div>
+  1025→                    <div className="max-h-96 overflow-y-auto custom-scrollbar space-y-1">
+  1026→                      {users.length === 0 ? (<div className="text-center py-8"><User className="w-8 h-8 text-white/10 mx-auto mb-2" /><p className="text-sm text-white/20">Nenhum usuario.</p></div>) : users.map((u) => (
+  1027→                        <div key={u.id} className={`flex items-center justify-between p-3 rounded-lg bg-white/[0.02] ${!u.isActive ? 'opacity-40' : ''}`}>
+  1028→                          <div className="flex-1 min-w-0">
+  1029→                            <div className="flex items-center gap-2">
+  1030→                              <span className="text-sm font-medium text-white">{u.displayName}</span>
+  1031→                              {!u.isActive && <Badge className="bg-red-500/10 text-red-400 border-red-500/20 text-[10px]">Inativo</Badge>}
+  1032→                            </div>
+  1033→                            <div className="flex items-center gap-3 mt-1 text-[11px] text-white/40">
+  1034→                              <span>@{u.username}</span>
+  1035→                              <span className="text-white/20">desde {new Date(u.createdAt).toLocaleDateString('pt-BR')}</span>
+  1036→                            </div>
+  1037→                          </div>
+  1038→                          <div className="flex items-center gap-2">
+  1039→                            {editingUser === u.id ? (
+  1040→                              <div className="flex items-center gap-1">
+  1041→                                <input type="number" value={editCredits} onChange={(e) => setEditCredits(e.target.value)} className="glass-input rounded-lg px-2 py-1 text-xs text-white w-20" />
+  1042→                                <button onClick={() => handleUpdateCredits(u.id, Number(editCredits))} className="text-emerald-400 hover:text-emerald-300 p-1"><Check className="w-4 h-4" /></button>
+  1043→                                <button onClick={() => setEditingUser(null)} className="text-white/30 hover:text-white/60 p-1"><X className="w-4 h-4" /></button>
+  1044→                              </div>
+  1045→                            ) : (
+  1046→                              <button onClick={() => { setEditingUser(u.id); setEditCredits(String(u.credits)); }} className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 transition-colors">
+  1047→                                <Coins className="w-3.5 h-3.5 text-amber-400" />
+  1048→                                <span className="text-xs font-semibold text-amber-400">{u.credits}</span>
+  1049→                              </button>
+  1050→                            )}
+  1051→                            <button onClick={() => handleDeleteUser(u.id)} className="text-white/20 hover:text-red-400 transition-colors p-1"><Trash2 className="w-3.5 h-3.5" /></button>
+  1052→                          </div>
+  1053→                        </div>
+  1054→                      ))}
+  1055→                    </div>
+  1056→                  </div>
+  1057→                </TabsContent>
+  1058→
+  1059→                {/* Tutorials Tab */}
+  1060→                <TabsContent value="tutorials" className="space-y-3 mt-0">
+  1061→                  <div className="glass rounded-xl p-5">
+  1062→                    <h3 className="text-sm font-semibold tracking-wider text-white mb-4 flex items-center gap-2"><Play className="w-4 h-4 text-white/40" />Adicionar Tutorial</h3>
+  1063→                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+  1064→                      <input placeholder="Titulo do video" value={newTutorial.title} onChange={(e) => setNewTutorial({ ...newTutorial, title: e.target.value })} className="glass-input rounded-xl px-4 py-2.5 text-sm text-white placeholder:text-white/20" />
+  1065→                      <input placeholder="URL do video (YouTube...)" value={newTutorial.url} onChange={(e) => setNewTutorial({ ...newTutorial, url: e.target.value })} className="glass-input rounded-xl px-4 py-2.5 text-sm text-white placeholder:text-white/20" />
+  1066→                      <button onClick={handleCreateTutorial} className="h-10 rounded-xl bg-white text-black text-xs font-medium tracking-wider hover:bg-white/90 transition-colors flex items-center justify-center gap-1.5"><Play className="w-3.5 h-3.5" />ADICIONAR</button>
+  1067→                    </div>
+  1068→                  </div>
+  1069→                  <div className="glass rounded-xl p-5">
+  1070→                    <div className="flex items-center justify-between mb-4">
+  1071→                      <h3 className="text-sm font-semibold tracking-wider text-white">Tutoriais Cadastrados</h3>
+  1072→                      <button onClick={() => fetchTutorials(true)} className="text-white/30 hover:text-white/60 transition-colors"><RefreshCw className="w-3.5 h-3.5" /></button>
+  1073→                    </div>
+  1074→                    <div className="space-y-3 max-h-[500px] overflow-y-auto custom-scrollbar">
+  1075→                      {tutorials.length === 0 ? (
+  1076→                        <div className="text-center py-8"><Play className="w-8 h-8 text-white/10 mx-auto mb-2" /><p className="text-sm text-white/20">Nenhum tutorial.</p></div>
+  1077→                      ) : tutorials.map((t) => (
+  1078→                        <div key={t.id} className="flex items-start justify-between gap-3 p-3 rounded-lg bg-white/[0.02]">
+  1079→                          <div className="flex-1 min-w-0">
+  1080→                            <p className="text-sm font-medium text-white">{t.title}</p>
+  1081→                            <p className="text-[11px] text-white/30 mt-0.5 truncate">{t.url}</p>
+  1082→                          </div>
+  1083→                          <button onClick={() => handleDeleteTutorial(t.id)} className="text-white/20 hover:text-red-400 transition-colors p-1 shrink-0"><Trash2 className="w-3.5 h-3.5" /></button>
+  1084→                        </div>
+  1085→                      ))}
+  1086→                    </div>
+  1087→                  </div>
+  1088→                </TabsContent>
+  1089→
+  1090→                {/* Links Tab */}
+  1091→                <TabsContent value="links" className="space-y-3 mt-0">
+  1092→                  <div className="glass rounded-xl p-5">
+  1093→                    <h3 className="text-sm font-semibold tracking-wider text-white mb-4 flex items-center gap-2"><Plus className="w-4 h-4 text-white/40" />Adicionar Link</h3>
+  1094→                    <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+  1095→                      <input placeholder="Titulo do link" value={newLink.title} onChange={(e) => setNewLink({ ...newLink, title: e.target.value })} className="glass-input rounded-xl px-4 py-2.5 text-sm text-white placeholder:text-white/20" />
+  1096→                      <input placeholder="URL (https://...)" value={newLink.url} onChange={(e) => setNewLink({ ...newLink, url: e.target.value })} className="glass-input rounded-xl px-4 py-2.5 text-sm text-white placeholder:text-white/20" />
+  1097→                      <input placeholder="Descricao (opcional)" value={newLink.description} onChange={(e) => setNewLink({ ...newLink, description: e.target.value })} className="glass-input rounded-xl px-4 py-2.5 text-sm text-white placeholder:text-white/20" />
+  1098→                      <button onClick={handleCreateLink} className="h-10 rounded-xl bg-white text-black text-xs font-medium tracking-wider hover:bg-white/90 transition-colors flex items-center justify-center gap-1.5"><Plus className="w-3.5 h-3.5" />ADICIONAR</button>
+  1099→                    </div>
+  1100→                  </div>
+  1101→                  <div className="glass rounded-xl p-5">
+  1102→                    <div className="flex items-center justify-between mb-4">
+  1103→                      <h3 className="text-sm font-semibold tracking-wider text-white">Links Cadastrados</h3>
+  1104→                      <button onClick={() => fetchLinks(true)} className="text-white/30 hover:text-white/60 transition-colors"><RefreshCw className="w-3.5 h-3.5" /></button>
+  1105→                    </div>
+  1106→                    <div className="max-h-96 overflow-y-auto custom-scrollbar space-y-1">
+  1107→                      {links.length === 0 ? (
+  1108→                        <div className="text-center py-8"><Link2 className="w-8 h-8 text-white/10 mx-auto mb-2" /><p className="text-sm text-white/20">Nenhum link.</p></div>
+  1109→                      ) : links.map((l) => (
+  1110→                        <div key={l.id} className="flex items-start justify-between gap-3 p-3 rounded-lg bg-white/[0.02]">
+  1111→                          <div className="flex-1 min-w-0">
+  1112→                            <div className="flex items-center gap-2">
+  1113→                              <p className="text-sm font-medium text-white">{l.title}</p>
+  1114→                              {!l.isActive && <Badge className="bg-red-500/10 text-red-400 border-red-500/20 text-[10px]">Inativo</Badge>}
+  1115→                            </div>
+  1116→                            <p className="text-[11px] text-white/30 mt-0.5 truncate">{l.url}</p>
+  1117→                            {l.description && <p className="text-[11px] text-white/20 mt-0.5">{l.description}</p>}
+  1118→                          </div>
+  1119→                          <button onClick={() => handleDeleteLink(l.id)} className="text-white/20 hover:text-red-400 transition-colors p-1 shrink-0"><Trash2 className="w-3.5 h-3.5" /></button>
+  1120→                        </div>
+  1121→                      ))}
+  1122→                    </div>
+  1123→                  </div>
+  1124→                </TabsContent>
+  1125→              </Tabs>
+  1126→            </motion.div>
+  1127→          )}
+  1128→        </AnimatePresence>
+  1129→      </main>
+  1130→
+  1131→      <footer className="relative z-10 border-t border-white/[0.05] mt-auto">
+  1132→        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4 text-center"><p className="text-[11px] text-white/15 tracking-wider">Magnata Key Generator</p></div>
+  1133→      </footer>
+  1134→
+  1135→      {/* Admin Login Modal */}
+  1136→      <Dialog open={showAdminLogin} onOpenChange={setShowAdminLogin}>
+  1137→        <DialogContent className="glass-strong rounded-2xl max-w-sm p-6 bg-transparent border-white/10">
+  1138→          <DialogHeader><DialogTitle className="text-white text-base tracking-wider font-bold">Acesso Admin</DialogTitle><DialogDescription className="text-white/30 text-xs">Digite a senha de administrador</DialogDescription></DialogHeader>
+  1139→          <div className="flex gap-2 mt-4">
+  1140→            <input type="password" placeholder="Senha..." value={adminPassword} onChange={(e) => setAdminPassword(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleAdminLogin()} className="glass-input flex-1 rounded-xl px-4 py-2.5 text-sm text-white placeholder:text-white/20" />
+  1141→            <button onClick={handleAdminLogin} disabled={loggingIn} className="h-10 w-10 rounded-xl bg-white text-black flex items-center justify-center hover:bg-white/90 transition-colors disabled:opacity-50">{loggingIn ? <RefreshCw className="w-4 h-4 animate-spin" /> : <ArrowRight className="w-4 h-4" />}</button>
+  1142→          </div>
+  1143→        </DialogContent>
+  1144→      </Dialog>
+  1145→
+  1146→      {/* User Login Modal */}
+  1147→      <Dialog open={showUserLogin} onOpenChange={setShowUserLogin}>
+  1148→        <DialogContent className="glass-strong rounded-2xl max-w-sm p-6 bg-transparent border-white/10">
+  1149→          <DialogHeader><DialogTitle className="text-white text-base tracking-wider font-bold">Login</DialogTitle><DialogDescription className="text-white/30 text-xs">Entre com seu usuario e senha</DialogDescription></DialogHeader>
+  1150→          <div className="space-y-3 mt-4">
+  1151→            <input placeholder="Usuario..." value={loginUsername} onChange={(e) => setLoginUsername(e.target.value)} className="glass-input w-full rounded-xl px-4 py-2.5 text-sm text-white placeholder:text-white/20" />
+  1152→            <input type="password" placeholder="Senha..." value={loginPassword} onChange={(e) => setLoginPassword(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleUserLogin()} className="glass-input w-full rounded-xl px-4 py-2.5 text-sm text-white placeholder:text-white/20" />
+  1153→            <button onClick={handleUserLogin} disabled={userLoggingIn} className="w-full h-10 rounded-xl bg-white text-black text-xs font-medium tracking-wider hover:bg-white/90 transition-colors disabled:opacity-50 flex items-center justify-center gap-1.5">
+  1154→              {userLoggingIn ? <><RefreshCw className="w-4 h-4 animate-spin" /> Entrando...</> : <><LogIn className="w-4 h-4" /> ENTRAR</>}
+  1155→            </button>
+  1156→          </div>
+  1157→        </DialogContent>
+  1158→      </Dialog>
+  1159→    </div>
+  1160→  );
+  1161→}

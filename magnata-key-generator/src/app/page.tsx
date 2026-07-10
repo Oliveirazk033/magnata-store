@@ -22,13 +22,19 @@ import Starfield from '@/components/Starfield';
 import {
   Key, Shield, Plus, Trash2, RefreshCw, Coins, ArrowRight,
   Lock, Unlock, History, Copy, Check, Store, BarChart3,
-  Package, BookOpen, X, LayoutDashboard, Hash, User, UserPlus, LogIn, LogOut, Wallet, Play, Link2, ExternalLink,
+  Package, BookOpen, X, LayoutDashboard, Hash, User, UserPlus, LogIn, LogOut, Wallet, Play, Link2, ExternalLink, FolderOpen, Tag,
 } from 'lucide-react';
 
 /* ===== Types ===== */
+interface CategoryItem {
+  id: string; name: string; description: string | null;
+  sortOrder: number; isActive: boolean; productCount: number;
+  createdAt: string;
+}
 interface Product {
   id: string; name: string; description: string | null;
   duration: string; credits: number; isActive: boolean;
+  categoryId: string | null; categoryName: string | null;
   _count: { keys: number };
 }
 interface TransactionItem {
@@ -91,8 +97,13 @@ export default function Home() {
   const [deliveredProduct, setDeliveredProduct] = useState('');
   const [remainingCredits, setRemainingCredits] = useState(0);
 
+  // Categories
+  const [categories, setCategories] = useState<CategoryItem[]>([]);
+  const [adminCategoryFilter, setAdminCategoryFilter] = useState('');
+  const [newCategory, setNewCategory] = useState({ name: '', description: '' });
+
   // Admin form states
-  const [newProduct, setNewProduct] = useState({ name: '', description: '', duration: '', credits: '' });
+  const [newProduct, setNewProduct] = useState({ name: '', description: '', duration: '', credits: '', categoryId: '' });
   const [newKeysText, setNewKeysText] = useState('');
   const [addingKeysTo, setAddingKeysTo] = useState('');
   const [copiedKey, setCopiedKey] = useState(false);
@@ -124,10 +135,22 @@ export default function Home() {
   const getUserHeaders = () => loggedUser ? ({ 'x-user-id': loggedUser.id }) : {};
   const getAdminHeaders = () => ({ 'x-admin-key': adminPassword });
 
-  const fetchProducts = useCallback(async () => {
+  const fetchCategories = useCallback(async (isAdminFetch: boolean) => {
+    try {
+      const headers = isAdminFetch ? { 'x-admin-key': adminPassword } : {};
+      const res = await fetch('/api/categories', { headers });
+      const data = await res.json();
+      if (data.categories) {
+        if (isAdminFetch) setCategories(data.categories);
+      }
+    } catch { /* silent */ }
+  }, [adminPassword]);
+
+  const fetchProducts = useCallback(async (catId?: string) => {
     setLoadingProducts(true);
     try {
-      const res = await fetch('/api/products');
+      const url = catId ? `/api/products?categoryId=${catId}` : '/api/products';
+      const res = await fetch(url);
       const data = await res.json();
       if (data.products) setProducts(data.products);
     } catch { toast.error('Erro ao carregar produtos'); }
@@ -215,8 +238,8 @@ export default function Home() {
 
   useEffect(() => { fetchProducts(); fetchUserTutorials(); fetchUserLinks(); }, [fetchProducts, fetchUserTutorials, fetchUserLinks]);
   useEffect(() => {
-    if (isAdmin) { fetchTransactions(); fetchKeys(); fetchUsers(); fetchTutorials(true); fetchLinks(true); }
-  }, [isAdmin, fetchTransactions, fetchKeys, fetchUsers, fetchTutorials, fetchLinks]);
+    if (isAdmin) { fetchTransactions(); fetchKeys(); fetchUsers(); fetchTutorials(true); fetchLinks(true); fetchCategories(true); }
+  }, [isAdmin, fetchTransactions, fetchKeys, fetchUsers, fetchTutorials, fetchLinks, fetchCategories]);
   useEffect(() => { fetchUserHistory(); }, [fetchUserHistory]);
 
   // Refresh user credits after login
@@ -243,19 +266,21 @@ export default function Home() {
         setTimeout(async () => {
           const headers = { 'x-admin-key': adminPassword };
           try {
-            const [tRes, kRes, uRes, tutRes, lnkRes] = await Promise.all([
+            const [tRes, kRes, uRes, tutRes, lnkRes, catRes] = await Promise.all([
               fetch('/api/transactions', { headers }),
               fetch('/api/keys', { headers }),
               fetch('/api/auth/register', { headers }),
               fetch('/api/tutorials', { headers }),
               fetch('/api/links', { headers }),
+              fetch('/api/categories', { headers }),
             ]);
-            const [tData, kData, uData, tutData, lnkData] = await Promise.all([tRes.json(), kRes.json(), uRes.json(), tutRes.json(), lnkRes.json()]);
+            const [tData, kData, uData, tutData, lnkData, catData] = await Promise.all([tRes.json(), kRes.json(), uRes.json(), tutRes.json(), lnkRes.json(), catRes.json()]);
             if (tData.transactions) { setTransactions(tData.transactions); setStats({ totalCredits: tData.totalCredits, totalSales: tData.totalSales }); }
             if (kData.keys) setKeys(kData.keys);
             if (uData.users) setUsers(uData.users);
             if (tutData.tutorials) setTutorials(tutData.tutorials);
             if (lnkData.links) setLinks(lnkData.links);
+            if (catData.categories) setCategories(catData.categories);
           } catch (err) { console.error('Admin data fetch error:', err); }
         }, 100);
       }
@@ -378,13 +403,37 @@ export default function Home() {
     } catch { toast.error('Erro'); }
   };
 
-  const handleCreateProduct = async () => {
-    if (!newProduct.name || !newProduct.duration || !newProduct.credits) { toast.error('Preencha todos os campos'); return; }
+  const handleCreateCategory = async () => {
+    if (!newCategory.name.trim()) { toast.error('Preencha o nome da categoria'); return; }
     try {
-      const res = await fetch('/api/products', { method: 'POST', headers: { 'Content-Type': 'application/json', ...getAdminHeaders() }, body: JSON.stringify(newProduct) });
+      const res = await fetch('/api/categories', { method: 'POST', headers: { 'Content-Type': 'application/json', ...getAdminHeaders() }, body: JSON.stringify(newCategory) });
       const data = await res.json();
-      if (data.product) { toast.success(`"${data.product.name}" criado!`); setNewProduct({ name: '', description: '', duration: '', credits: '' }); fetchProducts(); }
-      else toast.error(data.error || 'Erro ao criar');
+      if (data.category) {
+        toast.success(`Categoria "${data.category.name}" criada!`);
+        setNewCategory({ name: '', description: '' });
+        fetchCategories(true);
+      } else { toast.error(data.error || 'Erro ao criar'); }
+    } catch { toast.error('Erro'); }
+  };
+
+  const handleDeleteCategory = async (id: string) => {
+    if (!confirm('Desativar esta categoria? Produtos vinculados nao serao excluidos.')) return;
+    try {
+      await fetch(`/api/categories?id=${id}`, { method: 'DELETE', headers: getAdminHeaders() });
+      toast.success('Categoria desativada'); fetchCategories(true);
+    } catch { toast.error('Erro'); }
+  };
+
+  const handleCreateProduct = async () => {
+    if (!newProduct.name || !newProduct.duration || !newProduct.credits) { toast.error('Preencha todos os campos obrigatorios'); return; }
+    try {
+      const res = await fetch('/api/products', { method: 'POST', headers: { 'Content-Type': 'application/json', ...getAdminHeaders() }, body: JSON.stringify({ ...newProduct, categoryId: newProduct.categoryId || null }) });
+      const data = await res.json();
+      if (data.product) {
+        toast.success(`"${data.product.name}" criado!`);
+        setNewProduct({ name: '', description: '', duration: '', credits: '', categoryId: '' });
+        fetchProducts(); fetchCategories(true);
+      } else { toast.error(data.error || 'Erro ao criar'); }
     } catch { toast.error('Erro'); }
   };
 
@@ -394,7 +443,7 @@ export default function Home() {
     try {
       const res = await fetch('/api/keys', { method: 'POST', headers: { 'Content-Type': 'application/json', ...getAdminHeaders() }, body: JSON.stringify({ productId: addingKeysTo, codes }) });
       const data = await res.json();
-      if (data.added > 0) { toast.success(data.message); setNewKeysText(''); fetchProducts(); fetchKeys(addingKeysTo); }
+      if (data.added > 0) { toast.success(data.message); setNewKeysText(''); fetchProducts(adminCategoryFilter || undefined); fetchKeys(addingKeysTo); }
       else toast.error(data.error || 'Nenhuma key adicionada');
     } catch { toast.error('Erro'); }
   };
@@ -403,7 +452,7 @@ export default function Home() {
     if (!confirm(`Desativar "${name}"?`)) return;
     try {
       await fetch(`/api/products?id=${id}`, { method: 'DELETE', headers: getAdminHeaders() });
-      toast.success('Produto desativado'); fetchProducts();
+      toast.success('Produto desativado'); fetchProducts(adminCategoryFilter || undefined); fetchCategories(true);
     } catch { toast.error('Erro'); }
   };
 
@@ -456,8 +505,9 @@ export default function Home() {
 
   const copyKey = (key: string) => { navigator.clipboard.writeText(key); setCopiedKey(true); setTimeout(() => setCopiedKey(false), 2000); };
   const activeProducts = products.filter((p) => p.isActive);
-  const productCategories = [...new Set(activeProducts.map((p) => p.name))];
-  const categoryProducts = selectedCategory ? activeProducts.filter((p) => p.name === selectedCategory) : [];
+  // User-side: categories derived from products that have a categoryId
+  const userCategories = [...new Map(activeProducts.filter(p => p.categoryId).map(p => [p.categoryId!, { id: p.categoryId!, name: p.categoryName || 'Sem nome' }])).values()];
+  const categoryProducts = selectedCategory ? activeProducts.filter((p) => p.categoryId === selectedCategory) : [];
   const filteredHistory = historySearch.trim()
     ? userHistory.filter((h) => h.keyCode.toLowerCase().includes(historySearch.toLowerCase()) || h.productName.toLowerCase().includes(historySearch.toLowerCase()))
     : userHistory;
@@ -473,7 +523,7 @@ export default function Home() {
   const navItems = isAdmin
     ? [
         { group: 'Principal', items: [{ icon: LayoutDashboard, label: 'Dashboard', tab: 'products' }] },
-        { group: 'Estoque', items: [{ icon: Key, label: 'Produtos & Keys', tab: 'products' }, { icon: Package, label: 'Estoque', tab: 'stock' }, { icon: History, label: 'Historico', tab: 'sales' }] },
+        { group: 'Estoque', items: [{ icon: FolderOpen, label: 'Categorias', tab: 'categories' }, { icon: Key, label: 'Produtos & Keys', tab: 'products' }, { icon: Package, label: 'Estoque', tab: 'stock' }, { icon: History, label: 'Historico', tab: 'sales' }] },
         { group: 'Sistema', items: [{ icon: User, label: 'Usuarios', tab: 'users' }, { icon: Play, label: 'Tutoriais', tab: 'tutorials' }, { icon: Link2, label: 'Links', tab: 'links' }] },
       ]
     : [];
@@ -656,7 +706,7 @@ export default function Home() {
                             {activeProducts.map((p) => (
                               <div key={p.id} className="flex items-center justify-between p-3 rounded-lg bg-white/[0.02]">
                                 <div>
-                                  <span className="text-sm font-medium text-white">{p.name}</span>
+                                  <div className="flex items-center gap-2"><span className="text-sm font-medium text-white">{p.name}</span>{p.categoryName && <span className="text-[10px] text-blue-400/60">({p.categoryName})</span>}</div>
                                   <span className="text-[11px] text-white/30 ml-2">{p.duration}</span>
                                 </div>
                                 <div className="flex items-center gap-2">
@@ -695,17 +745,17 @@ export default function Home() {
                     </div>
                   ) : (
                     <div className="glass rounded-xl p-5 space-y-4 max-w-md">
-                      {/* Dropdown 1: Selecionar Produto */}
+                      {/* Dropdown 1: Selecionar Categoria */}
                       <div>
-                        <label className="text-[11px] uppercase tracking-wider text-white/30 mb-2 block">Selecionar Produto</label>
+                        <label className="text-[11px] uppercase tracking-wider text-white/30 mb-2 block">Selecionar Categoria</label>
                         <select
                           value={selectedCategory}
                           onChange={(e) => { setSelectedCategory(e.target.value); setSelectedProductId(''); setGenerateQuantity(1); }}
                           className="glass-input w-full rounded-xl px-4 py-3 text-sm text-white bg-transparent"
                         >
                           <option value="">Selecione...</option>
-                          {productCategories.map((cat) => (
-                            <option key={cat} value={cat}>{cat}</option>
+                          {userCategories.map((cat) => (
+                            <option key={cat.id} value={cat.id}>{cat.name}</option>
                           ))}
                         </select>
                       </div>
@@ -908,6 +958,7 @@ export default function Home() {
               <Tabs value={adminTab} onValueChange={setAdminTab}>
                 <TabsList className="bg-white/[0.03] border border-white/[0.06] rounded-xl p-1 mb-4 w-full sm:w-auto flex-wrap">
                   {[
+                    { value: 'categories', icon: FolderOpen, label: 'Categorias' },
                     { value: 'products', icon: Key, label: 'Produtos' },
                     { value: 'stock', icon: Package, label: 'Estoque' },
                     { value: 'sales', icon: History, label: 'Historico' },
@@ -921,11 +972,52 @@ export default function Home() {
                   ))}
                 </TabsList>
 
+                {/* Categories Tab */}
+                <TabsContent value="categories" className="space-y-3 mt-0">
+                  <div className="glass rounded-xl p-5">
+                    <h3 className="text-sm font-semibold tracking-wider text-white mb-4 flex items-center gap-2"><Plus className="w-4 h-4 text-white/40" />Nova Categoria</h3>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      <input placeholder="Nome da categoria" value={newCategory.name} onChange={(e) => setNewCategory({ ...newCategory, name: e.target.value })} className="glass-input rounded-xl px-4 py-2.5 text-sm text-white placeholder:text-white/20" />
+                      <input placeholder="Descricao (opcional)" value={newCategory.description} onChange={(e) => setNewCategory({ ...newCategory, description: e.target.value })} className="glass-input rounded-xl px-4 py-2.5 text-sm text-white placeholder:text-white/20" />
+                      <button onClick={handleCreateCategory} className="h-10 rounded-xl bg-white text-black text-xs font-medium tracking-wider hover:bg-white/90 transition-colors flex items-center justify-center gap-1.5"><Plus className="w-3.5 h-3.5" />CRIAR</button>
+                    </div>
+                  </div>
+                  <div className="glass rounded-xl p-5">
+                    <div className="flex items-center justify-between mb-4">
+                      <h3 className="text-sm font-semibold tracking-wider text-white">Categorias Cadastradas</h3>
+                      <button onClick={() => fetchCategories(true)} className="text-white/30 hover:text-white/60 transition-colors"><RefreshCw className="w-3.5 h-3.5" /></button>
+                    </div>
+                    <div className="max-h-96 overflow-y-auto custom-scrollbar space-y-1">
+                      {categories.length === 0 ? (
+                        <div className="text-center py-8"><FolderOpen className="w-8 h-8 text-white/10 mx-auto mb-2" /><p className="text-sm text-white/20">Nenhuma categoria.</p></div>
+                      ) : categories.map((c) => (
+                        <div key={c.id} className="flex items-center justify-between p-3 rounded-lg bg-white/[0.02] hover:bg-white/[0.04] transition-colors">
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2">
+                              <span className="text-sm font-medium text-white truncate">{c.name}</span>
+                              {!c.isActive && <Badge className="bg-red-500/10 text-red-400 border-red-500/20 text-[10px]">Inativa</Badge>}
+                            </div>
+                            <div className="flex items-center gap-3 mt-1 text-[11px] text-white/40">
+                              <span>{c.productCount} produto{c.productCount !== 1 ? 's' : ''}</span>
+                              {c.description && <span className="text-white/20 truncate">{c.description}</span>}
+                            </div>
+                          </div>
+                          <button onClick={() => handleDeleteCategory(c.id)} className="text-white/20 hover:text-red-400 transition-colors p-1"><Trash2 className="w-4 h-4" /></button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </TabsContent>
+
                 {/* Products Tab */}
                 <TabsContent value="products" className="space-y-3 mt-0">
                   <div className="glass rounded-xl p-5">
                     <h3 className="text-sm font-semibold tracking-wider text-white mb-4 flex items-center gap-2"><Plus className="w-4 h-4 text-white/40" />Novo Produto</h3>
-                    <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+                      <select value={newProduct.categoryId} onChange={(e) => setNewProduct({ ...newProduct, categoryId: e.target.value })} className="glass-input rounded-xl px-4 py-2.5 text-sm text-white/80">
+                        <option value="">Sem categoria</option>
+                        {categories.filter(c => c.isActive).map((c) => (<option key={c.id} value={c.id}>{c.name}</option>))}
+                      </select>
                       <input placeholder="Nome" value={newProduct.name} onChange={(e) => setNewProduct({ ...newProduct, name: e.target.value })} className="glass-input rounded-xl px-4 py-2.5 text-sm text-white placeholder:text-white/20" />
                       <input placeholder="Duracao (1 dia)" value={newProduct.duration} onChange={(e) => setNewProduct({ ...newProduct, duration: e.target.value })} className="glass-input rounded-xl px-4 py-2.5 text-sm text-white placeholder:text-white/20" />
                       <input type="number" placeholder="Creditos" value={newProduct.credits} onChange={(e) => setNewProduct({ ...newProduct, credits: e.target.value })} className="glass-input rounded-xl px-4 py-2.5 text-sm text-white placeholder:text-white/20" />
@@ -933,12 +1025,18 @@ export default function Home() {
                     </div>
                   </div>
                   <div className="glass rounded-xl p-5">
-                    <h3 className="text-sm font-semibold tracking-wider text-white mb-4">Produtos Cadastrados</h3>
+                    <div className="flex items-center justify-between mb-4">
+                      <h3 className="text-sm font-semibold tracking-wider text-white">Produtos Cadastrados</h3>
+                      <div className="flex gap-2 items-center">
+                        <select value={adminCategoryFilter} onChange={(e) => { setAdminCategoryFilter(e.target.value); fetchProducts(e.target.value || undefined); }} className="glass-input rounded-lg px-2 py-1 text-[11px] text-white/60"><option value="">Todas categorias</option>{categories.filter(c => c.isActive).map((c) => (<option key={c.id} value={c.id}>{c.name}</option>))}</select>
+                        <button onClick={() => fetchProducts(adminCategoryFilter || undefined)} className="text-white/30 hover:text-white/60 transition-colors"><RefreshCw className="w-3.5 h-3.5" /></button>
+                      </div>
+                    </div>
                     <div className="max-h-80 overflow-y-auto custom-scrollbar space-y-2">
                       {products.length === 0 ? (<p className="text-sm text-white/30 text-center py-6">Nenhum produto.</p>) : products.map((p) => (
                         <div key={p.id} className="flex items-center justify-between p-3 rounded-lg bg-white/[0.02] hover:bg-white/[0.04] transition-colors">
                           <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2"><span className="text-sm font-medium text-white truncate">{p.name}</span>{!p.isActive && <Badge className="bg-red-500/10 text-red-400 border-red-500/20 text-[10px]">Inativo</Badge>}</div>
+                            <div className="flex items-center gap-2"><span className="text-sm font-medium text-white truncate">{p.name}</span>{p.categoryName && <Badge className="bg-blue-500/10 text-blue-400 border-blue-500/20 text-[10px]"><Tag className="w-2.5 h-2.5 mr-0.5" />{p.categoryName}</Badge>}{!p.isActive && <Badge className="bg-red-500/10 text-red-400 border-red-500/20 text-[10px]">Inativo</Badge>}</div>
                             <div className="flex items-center gap-3 mt-1 text-[11px] text-white/40"><span>{p.duration}</span><span className="text-emerald-400">{p.credits} cr.</span><span className={p._count.keys > 0 ? 'text-emerald-400' : 'text-red-400'}>{p._count.keys} keys</span></div>
                           </div>
                           <button onClick={() => handleDeleteProduct(p.id, p.name)} className="text-white/20 hover:text-red-400 transition-colors p-1"><Trash2 className="w-4 h-4" /></button>
@@ -956,7 +1054,7 @@ export default function Home() {
                     <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
                       <select value={addingKeysTo} onChange={(e) => setAddingKeysTo(e.target.value)} className="glass-input rounded-xl px-4 py-2.5 text-sm text-white/80">
                         <option value="">Selecione...</option>
-                        {products.filter((p) => p.isActive).map((p) => (<option key={p.id} value={p.id}>{p.name} ({p.credits} cr.)</option>))}
+                        {products.filter((p) => p.isActive).map((p) => (<option key={p.id} value={p.id}>{p.categoryName ? `[${p.categoryName}] ` : ''}{p.name} ({p.credits} cr.)</option>))}
                       </select>
                       <div className="sm:col-span-2"><Textarea value={newKeysText} onChange={(e) => setNewKeysText(e.target.value)} rows={3} placeholder="Cole as keys aqui..." className="glass-input rounded-xl px-4 py-2.5 text-sm text-white font-mono placeholder:text-white/15 resize-none min-h-[88px]" /></div>
                       <button onClick={handleAddKeys} disabled={!addingKeysTo || !newKeysText.trim()} className="h-auto rounded-xl bg-white text-black text-xs font-medium tracking-wider hover:bg-white/90 transition-colors disabled:opacity-30 flex items-center justify-center gap-1.5 py-3"><Plus className="w-3.5 h-3.5" />ADICIONAR</button>
@@ -966,7 +1064,7 @@ export default function Home() {
                     <div className="flex items-center justify-between mb-4">
                       <h3 className="text-sm font-semibold tracking-wider text-white">Keys Cadastradas</h3>
                       <div className="flex gap-2 items-center">
-                        <select value={selectedProductId} onChange={(e) => { setSelectedProductId(e.target.value); fetchKeys(e.target.value || undefined); }} className="glass-input rounded-lg px-2 py-1 text-[11px] text-white/60"><option value="">Todos</option>{products.map((p) => (<option key={p.id} value={p.id}>{p.name}</option>))}</select>
+                        <select value={selectedProductId} onChange={(e) => { setSelectedProductId(e.target.value); fetchKeys(e.target.value || undefined); }} className="glass-input rounded-lg px-2 py-1 text-[11px] text-white/60"><option value="">Todos</option>{products.map((p) => (<option key={p.id} value={p.id}>{p.categoryName ? `[${p.categoryName}] ` : ''}{p.name}</option>))}</select>
                         <button onClick={() => fetchKeys(selectedProductId || undefined)} className="text-white/30 hover:text-white/60 transition-colors"><RefreshCw className="w-3.5 h-3.5" /></button>
                       </div>
                     </div>

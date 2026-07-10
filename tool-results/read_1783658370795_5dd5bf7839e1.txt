@@ -1,0 +1,362 @@
+     1→   800→   800→   800→                        />
+     2→   801→   801→   801→                        <button onClick={fetchUserHistory} className="text-white/30 hover:text-white/60 transition-colors p-2"><RefreshCw className="w-4 h-4" /></button>
+     3→   802→   802→   802→                      </div>
+     4→   803→   803→   803→                      <p className="text-[11px] text-white/20 mb-3">{filteredHistory.length} registro{filteredHistory.length !== 1 ? 's' : ''}</p>
+     5→   804→   804→   804→                      <div className="max-h-[500px] overflow-y-auto custom-scrollbar space-y-1">
+     6→   805→   805→   805→                        {filteredHistory.length === 0 ? (
+     7→   806→   806→   806→                          <div className="text-center py-8"><History className="w-8 h-8 text-white/10 mx-auto mb-2" /><p className="text-sm text-white/20">{historySearch ? 'Nenhum resultado.' : 'Nenhuma key gerada.'}</p></div>
+     8→   807→   807→   807→                        ) : filteredHistory.map((h) => (
+     9→   808→   808→   808→                          <div key={h.id} className="flex items-center justify-between p-3 rounded-lg bg-white/[0.02]">
+    10→   809→   809→   809→                            <div className="flex-1 min-w-0">
+    11→   810→   810→   810→                              <div className="flex items-center gap-2">
+    12→   811→   811→   811→                                <code className="text-xs font-mono text-emerald-400/80 truncate">{h.keyCode}</code>
+    13→   812→   812→   812→                              </div>
+    14→   813→   813→   813→                              <div className="flex items-center gap-3 mt-1 text-[11px] text-white/30">
+    15→   814→   814→   814→                                <span>{h.productName}</span>
+    16→   815→   815→   815→                                <span className="text-amber-400/60">{h.credits} cr.</span>
+    17→   816→   816→   816→                                <span>{new Date(h.createdAt).toLocaleString('pt-BR')}</span>
+    18→   817→   817→   817→                              </div>
+    19→   818→   818→   818→                            </div>
+    20→   819→   819→   819→                            <button onClick={() => { navigator.clipboard.writeText(h.keyCode); toast.success('Key copiada!'); }} className="text-white/20 hover:text-white/60 transition-colors p-1.5 shrink-0">
+    21→   820→   820→   820→                              <Copy className="w-3.5 h-3.5" />
+    22→   821→   821→   821→                            </button>
+    23→   822→   822→   822→                          </div>
+    24→   823→   823→   823→                        ))}
+    25→   824→   824→   824→                      </div>
+    26→   825→   825→   825→                    </div>
+    27→   826→   826→   826→                  )}
+    28→   827→   827→   827→                </div>
+    29→   828→   828→   828→              ) : userTab === 'tutorials' ? (
+    30→   829→   829→   829→                <div>
+    31→   830→   830→   830→                  <div className="flex items-center gap-3 mb-6">
+    32→   831→   831→   831→                    <Play className="w-5 h-5 text-white/40" />
+    33→   832→   832→   832→                    <h1 className="text-xl font-bold tracking-wider text-white">Tutoriais</h1>
+    34→   833→   833→   833→                  </div>
+    35→   834→   834→   834→                  {userTutorials.length === 0 ? (
+    36→   835→   835→   835→                    <div className="glass rounded-xl p-12 text-center"><Play className="w-10 h-10 text-white/10 mx-auto mb-3" /><p className="text-sm text-white/30">Nenhum tutorial disponivel.</p></div>
+    37→   836→   836→   836→                  ) : (
+    38→   837→   837→   837→                    <div className="space-y-4">
+    39→   838→   838→   838→                      {userTutorials.map((t) => (
+    40→   839→   839→   839→                        <motion.div key={t.id} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }} className="glass rounded-xl overflow-hidden">
+    41→   840→   840→   840→                          <p className="text-sm font-semibold text-white px-5 pt-4 pb-2">{t.title}</p>
+    42→   841→   841→   841→                          <div className="relative w-full" style={{ paddingBottom: '56.25%' }}>
+    43→   842→   842→   842→                            <iframe
+    44→   843→   843→   843→                              src={t.embedUrl}
+    45→   844→   844→   844→                              title={t.title}
+    46→   845→   845→   845→                              className="absolute inset-0 w-full h-full"
+    47→   846→   846→   846→                              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+    48→   847→   847→   847→                              allowFullScreen
+    49→   848→   848→   848→                            />
+    50→   849→   849→   849→                          </div>
+    51→   850→   850→   850→                        </motion.div>
+    52→   851→   851→   851→                      ))}
+    53→   852→   852→   852→                    </div>
+    54→   853→   853→   853→                  )}
+    55→   854→   854→   854→                </div>
+    56→   855→   855→   855→              ) : userTab === 'links' ? (
+    57→   856→   856→   856→                <div>
+    58→   857→   857→   857→                  <div className="flex items-center gap-3 mb-6">
+    59→   858→   858→   858→                    <Link2 className="w-5 h-5 text-white/40" />
+    60→   859→   859→   859→                    <h1 className="text-xl font-bold tracking-wider text-white">Links</h1>
+    61→   860→   860→   860→                  </div>
+    62→   861→   861→   861→                  {userLinks.length === 0 ? (
+    63→   862→   862→   862→                    <div className="glass rounded-xl p-12 text-center"><Link2 className="w-10 h-10 text-white/10 mx-auto mb-3" /><p className="text-sm text-white/30">Nenhum link disponivel.</p></div>
+    64→   863→   863→   863→                  ) : (
+    65→   864→   864→   864→                    <div className="space-y-3">
+    66→   865→   865→   865→                      {userLinks.map((lnk, i) => (
+    67→   866→   866→   866→                        <motion.a
+    68→   867→   867→   867→                          key={lnk.id}
+    69→   868→   868→   868→                          href={lnk.url}
+    70→   869→   869→   869→                          target="_blank"
+    71→   870→   870→   870→                          rel="noopener noreferrer"
+    72→   871→   871→   871→                          initial={{ opacity: 0, y: 8 }}
+    73→   872→   872→   872→                          animate={{ opacity: 1, y: 0 }}
+    74→   873→   873→   873→                          transition={{ delay: i * 0.05, duration: 0.3 }}
+    75→   874→   874→   874→                          className="glass glass-hover rounded-xl p-4 flex items-center gap-4 group cursor-pointer block"
+    76→   875→   875→   875→                        >
+    77→   876→   876→   876→                          <div className="w-10 h-10 rounded-xl bg-white/5 flex items-center justify-center shrink-0 group-hover:bg-white/10 transition-colors">
+    78→   877→   877→   877→                            <ExternalLink className="w-4 h-4 text-white/40 group-hover:text-white/70 transition-colors" />
+    79→   878→   878→   878→                          </div>
+    80→   879→   879→   879→                          <div className="flex-1 min-w-0">
+    81→   880→   880→   880→                            <p className="text-sm font-semibold text-white group-hover:text-white/90 transition-colors">{lnk.title}</p>
+    82→   881→   881→   881→                            {lnk.description && <p className="text-xs text-white/30 mt-0.5 truncate">{lnk.description}</p>}
+    83→   882→   882→   882→                            <p className="text-[11px] text-white/15 mt-1 truncate">{lnk.url}</p>
+    84→   883→   883→   883→                          </div>
+    85→   884→   884→   884→                          <ArrowRight className="w-4 h-4 text-white/20 group-hover:text-white/50 group-hover:translate-x-0.5 transition-all shrink-0" />
+    86→   885→   885→   885→                        </motion.a>
+    87→   886→   886→   886→                      ))}
+    88→   887→   887→   887→                    </div>
+    89→   888→   888→   888→                  )}
+    90→   889→   889→   889→                </div>
+    91→   890→   890→   890→              ) : null}
+    92→   891→   891→   891→            </motion.div>
+    93→   892→   892→   892→          ) : (
+    94→   893→   893→   893→            /* ====== ADMIN VIEW ====== */
+    95→   894→   894→   894→            <motion.div key="admin" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -12 }} transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}>
+    96→   895→   895→   895→              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
+    97→   896→   896→   896→                {[
+    98→   897→   897→   897→                  { label: 'Produtos Ativos', value: activeProducts.length, color: 'text-white' },
+    99→   898→   898→   898→                  { label: 'Keys em Estoque', value: activeProducts.reduce((s, p) => s + p._count.keys, 0), color: 'text-emerald-400' },
+   100→   899→   899→   899→                  { label: 'Vendas Totais', value: stats.totalSales, color: 'text-white' },
+   101→   900→   900→   900→                  { label: 'Usuarios', value: users.length, color: 'text-blue-400' },
+   102→   901→   901→   901→                ].map((s, i) => (
+   103→   902→   902→   902→                  <motion.div key={s.label} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }}>
+   104→   903→   903→   903→                    <div className="glass rounded-xl p-4"><p className="text-[10px] uppercase tracking-wider text-white/30">{s.label}</p><p className={`text-2xl font-bold mt-1 ${s.color}`}>{s.value}</p></div>
+   105→   904→   904→   904→                  </motion.div>
+   106→   905→   905→   905→                ))}
+   107→   906→   906→   906→              </div>
+   108→   907→   907→   907→
+   109→   908→   908→   908→              <Tabs value={adminTab} onValueChange={setAdminTab}>
+   110→   909→   909→   909→                <TabsList className="bg-white/[0.03] border border-white/[0.06] rounded-xl p-1 mb-4 w-full sm:w-auto flex-wrap">
+   111→   910→   910→   910→                  {[
+   112→   911→   911→   911→                    { value: 'products', icon: Key, label: 'Produtos' },
+   113→   912→   912→   912→                    { value: 'stock', icon: Package, label: 'Estoque' },
+   114→   913→   913→   913→                    { value: 'sales', icon: History, label: 'Historico' },
+   115→   914→   914→   914→                    { value: 'users', icon: User, label: 'Usuarios' },
+   116→   915→   915→   915→                    { value: 'tutorials', icon: Play, label: 'Tutoriais' },
+   117→   916→   916→   916→                    { value: 'links', icon: Link2, label: 'Links' },
+   118→   917→   917→   917→                  ].map((t) => (
+   119→   918→   918→   918→                    <TabsTrigger key={t.value} value={t.value} className="data-[state=active]:bg-white/10 data-[state=active]:text-white text-white/40 rounded-lg text-xs tracking-wider gap-1.5">
+   120→   919→   919→   919→                      <t.icon className="w-3.5 h-3.5" />{t.label}
+   121→   920→   920→   920→                    </TabsTrigger>
+   122→   921→   921→   921→                  ))}
+   123→   922→   922→   922→                </TabsList>
+   124→   923→   923→   923→
+   125→   924→   924→   924→                {/* Products Tab */}
+   126→   925→   925→   925→                <TabsContent value="products" className="space-y-3 mt-0">
+   127→   926→   926→   926→                  <div className="glass rounded-xl p-5">
+   128→   927→   927→   927→                    <h3 className="text-sm font-semibold tracking-wider text-white mb-4 flex items-center gap-2"><Plus className="w-4 h-4 text-white/40" />Novo Produto</h3>
+   129→   928→   928→   928→                    <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+   130→   929→   929→   929→                      <input placeholder="Nome" value={newProduct.name} onChange={(e) => setNewProduct({ ...newProduct, name: e.target.value })} className="glass-input rounded-xl px-4 py-2.5 text-sm text-white placeholder:text-white/20" />
+   131→   930→   930→   930→                      <input placeholder="Duracao (1 dia)" value={newProduct.duration} onChange={(e) => setNewProduct({ ...newProduct, duration: e.target.value })} className="glass-input rounded-xl px-4 py-2.5 text-sm text-white placeholder:text-white/20" />
+   132→   931→   931→   931→                      <input type="number" placeholder="Creditos" value={newProduct.credits} onChange={(e) => setNewProduct({ ...newProduct, credits: e.target.value })} className="glass-input rounded-xl px-4 py-2.5 text-sm text-white placeholder:text-white/20" />
+   133→   932→   932→   932→                      <button onClick={handleCreateProduct} className="h-10 rounded-xl bg-white text-black text-xs font-medium tracking-wider hover:bg-white/90 transition-colors flex items-center justify-center gap-1.5"><Plus className="w-3.5 h-3.5" />CRIAR</button>
+   134→   933→   933→   933→                    </div>
+   135→   934→   934→   934→                  </div>
+   136→   935→   935→   935→                  <div className="glass rounded-xl p-5">
+   137→   936→   936→   936→                    <h3 className="text-sm font-semibold tracking-wider text-white mb-4">Produtos Cadastrados</h3>
+   138→   937→   937→   937→                    <div className="max-h-80 overflow-y-auto custom-scrollbar space-y-2">
+   139→   938→   938→   938→                      {products.length === 0 ? (<p className="text-sm text-white/30 text-center py-6">Nenhum produto.</p>) : products.map((p) => (
+   140→   939→   939→   939→                        <div key={p.id} className="flex items-center justify-between p-3 rounded-lg bg-white/[0.02] hover:bg-white/[0.04] transition-colors">
+   141→   940→   940→   940→                          <div className="flex-1 min-w-0">
+   142→   941→   941→   941→                            <div className="flex items-center gap-2"><span className="text-sm font-medium text-white truncate">{p.name}</span>{!p.isActive && <Badge className="bg-red-500/10 text-red-400 border-red-500/20 text-[10px]">Inativo</Badge>}</div>
+   143→   942→   942→   942→                            <div className="flex items-center gap-3 mt-1 text-[11px] text-white/40"><span>{p.duration}</span><span className="text-emerald-400">{p.credits} cr.</span><span className={p._count.keys > 0 ? 'text-emerald-400' : 'text-red-400'}>{p._count.keys} keys</span></div>
+   144→   943→   943→   943→                          </div>
+   145→   944→   944→   944→                          <button onClick={() => handleDeleteProduct(p.id, p.name)} className="text-white/20 hover:text-red-400 transition-colors p-1"><Trash2 className="w-4 h-4" /></button>
+   146→   945→   945→   945→                        </div>
+   147→   946→   946→   946→                      ))}
+   148→   947→   947→   947→                    </div>
+   149→   948→   948→   948→                  </div>
+   150→   949→   949→   949→                </TabsContent>
+   151→   950→   950→   950→
+   152→   951→   951→   951→                {/* Stock Tab */}
+   153→   952→   952→   952→                <TabsContent value="stock" className="space-y-3 mt-0">
+   154→   953→   953→   953→                  <div className="glass rounded-xl p-5">
+   155→   954→   954→   954→                    <h3 className="text-sm font-semibold tracking-wider text-white mb-1 flex items-center gap-2"><Plus className="w-4 h-4 text-white/40" />Adicionar Keys</h3>
+   156→   955→   955→   955→                    <p className="text-[11px] text-white/25 mb-4">Cole uma key por linha</p>
+   157→   956→   956→   956→                    <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+   158→   957→   957→   957→                      <select value={addingKeysTo} onChange={(e) => setAddingKeysTo(e.target.value)} className="glass-input rounded-xl px-4 py-2.5 text-sm text-white/80">
+   159→   958→   958→   958→                        <option value="">Selecione...</option>
+   160→   959→   959→   959→                        {products.filter((p) => p.isActive).map((p) => (<option key={p.id} value={p.id}>{p.name} ({p.credits} cr.)</option>))}
+   161→   960→   960→   960→                      </select>
+   162→   961→   961→   961→                      <div className="sm:col-span-2"><Textarea value={newKeysText} onChange={(e) => setNewKeysText(e.target.value)} rows={3} placeholder="Cole as keys aqui..." className="glass-input rounded-xl px-4 py-2.5 text-sm text-white font-mono placeholder:text-white/15 resize-none min-h-[88px]" /></div>
+   163→   962→   962→   962→                      <button onClick={handleAddKeys} disabled={!addingKeysTo || !newKeysText.trim()} className="h-auto rounded-xl bg-white text-black text-xs font-medium tracking-wider hover:bg-white/90 transition-colors disabled:opacity-30 flex items-center justify-center gap-1.5 py-3"><Plus className="w-3.5 h-3.5" />ADICIONAR</button>
+   164→   963→   963→   963→                    </div>
+   165→   964→   964→   964→                  </div>
+   166→   965→   965→   965→                  <div className="glass rounded-xl p-5">
+   167→   966→   966→   966→                    <div className="flex items-center justify-between mb-4">
+   168→   967→   967→   967→                      <h3 className="text-sm font-semibold tracking-wider text-white">Keys Cadastradas</h3>
+   169→   968→   968→   968→                      <div className="flex gap-2 items-center">
+   170→   969→   969→   969→                        <select value={selectedProductId} onChange={(e) => { setSelectedProductId(e.target.value); fetchKeys(e.target.value || undefined); }} className="glass-input rounded-lg px-2 py-1 text-[11px] text-white/60"><option value="">Todos</option>{products.map((p) => (<option key={p.id} value={p.id}>{p.name}</option>))}</select>
+   171→   970→   970→   970→                        <button onClick={() => fetchKeys(selectedProductId || undefined)} className="text-white/30 hover:text-white/60 transition-colors"><RefreshCw className="w-3.5 h-3.5" /></button>
+   172→   971→   971→   971→                      </div>
+   173→   972→   972→   972→                    </div>
+   174→   973→   973→   973→                    <div className="max-h-96 overflow-y-auto custom-scrollbar space-y-1">
+   175→   974→   974→   974→                      {keys.length === 0 ? (<div className="text-center py-8"><Hash className="w-8 h-8 text-white/10 mx-auto mb-2" /><p className="text-sm text-white/20">Nenhuma key.</p></div>) : keys.map((k) => (
+   176→   975→   975→   975→                        <div key={k.id} className={`flex items-center justify-between p-2.5 rounded-lg ${k.isSold ? 'opacity-40' : 'bg-white/[0.02]'}`}>
+   177→   976→   976→   976→                          <div className="flex-1 min-w-0">
+   178→   977→   977→   977→                            <div className="flex items-center gap-2"><code className="text-xs font-mono text-white/80 truncate">{k.code}</code>{k.isSold ? <Badge className="bg-red-500/10 text-red-400 border-red-500/20 text-[10px]">Vendida</Badge> : <Badge className="bg-emerald-500/10 text-emerald-400 border-emerald-500/20 text-[10px]">Disponivel</Badge>}</div>
+   179→   978→   978→   978→                            <p className="text-[10px] text-white/25 mt-0.5">{k.product.name} — {k.product.duration}</p>
+   180→   979→   979→   979→                          </div>
+   181→   980→   980→   980→                          {!k.isSold && <button onClick={() => handleDeleteKey(k.id)} className="text-white/20 hover:text-red-400 transition-colors p-1"><Trash2 className="w-3.5 h-3.5" /></button>}
+   182→   981→   981→   981→                        </div>
+   183→   982→   982→   982→                      ))}
+   184→   983→   983→   983→                    </div>
+   185→   984→   984→   984→                  </div>
+   186→   985→   985→   985→                </TabsContent>
+   187→   986→   986→   986→
+   188→   987→   987→   987→                {/* Sales Tab */}
+   189→   988→   988→   988→                <TabsContent value="sales" className="mt-0">
+   190→   989→   989→   989→                  <div className="glass rounded-xl p-5">
+   191→   990→   990→   990→                    <div className="flex items-center justify-between mb-4">
+   192→   991→   991→   991→                      <h3 className="text-sm font-semibold tracking-wider text-white flex items-center gap-2"><BarChart3 className="w-4 h-4 text-white/40" />Historico de Vendas</h3>
+   193→   992→   992→   992→                      <button onClick={fetchTransactions} className="text-white/30 hover:text-white/60 transition-colors"><RefreshCw className="w-3.5 h-3.5" /></button>
+   194→   993→   993→   993→                    </div>
+   195→   994→   994→   994→                    <div className="max-h-96 overflow-y-auto custom-scrollbar space-y-1">
+   196→   995→   995→   995→                      {transactions.length === 0 ? (<div className="text-center py-8"><History className="w-8 h-8 text-white/10 mx-auto mb-2" /><p className="text-sm text-white/20">Nenhuma venda.</p></div>) : transactions.map((t) => (
+   197→   996→   996→   996→                        <div key={t.id} className="flex items-center justify-between p-3 rounded-lg bg-white/[0.02]">
+   198→   997→   997→   997→                          <div className="flex-1 min-w-0">
+   199→   998→   998→   998→                            <div className="flex items-center gap-2"><span className="text-sm font-medium text-white">{t.productName}</span><Badge className="bg-amber-500/10 text-amber-400 border-amber-500/20 text-[10px]">{t.credits} cr.</Badge></div>
+   200→   999→   999→   999→                            <div className="flex items-center gap-3 mt-1 text-[11px] text-white/30"><span>{t.buyerInfo}</span><code className="text-emerald-400/70 font-mono">{t.key.code}</code></div>
+   201→  1000→  1000→  1000→                          </div>
+   202→  1001→  1001→  1001→                          <span className="text-[11px] text-white/20 shrink-0 ml-3">{new Date(t.createdAt).toLocaleString('pt-BR')}</span>
+   203→  1002→  1002→  1002→                        </div>
+   204→  1003→  1003→  1003→                      ))}
+   205→  1004→  1004→  1004→                    </div>
+   206→  1005→  1005→  1005→                  </div>
+   207→  1006→  1006→  1006→                </TabsContent>
+   208→  1007→  1007→  1007→
+   209→  1008→  1008→  1008→                {/* Users Tab */}
+   210→  1009→  1009→  1009→                <TabsContent value="users" className="space-y-3 mt-0">
+   211→  1010→  1010→  1010→                  <div className="glass rounded-xl p-5">
+   212→  1011→  1011→  1011→                    <h3 className="text-sm font-semibold tracking-wider text-white mb-4 flex items-center gap-2"><UserPlus className="w-4 h-4 text-white/40" />Novo Usuario</h3>
+   213→  1012→  1012→  1012→                    <div className="grid grid-cols-1 sm:grid-cols-5 gap-3">
+   214→  1013→  1013→  1013→                      <input placeholder="Usuario" value={newUser.username} onChange={(e) => setNewUser({ ...newUser, username: e.target.value })} className="glass-input rounded-xl px-4 py-2.5 text-sm text-white placeholder:text-white/20" />
+   215→  1014→  1014→  1014→                      <input type="password" placeholder="Senha" value={newUser.password} onChange={(e) => setNewUser({ ...newUser, password: e.target.value })} className="glass-input rounded-xl px-4 py-2.5 text-sm text-white placeholder:text-white/20" />
+   216→  1015→  1015→  1015→                      <input placeholder="Nome visivel" value={newUser.displayName} onChange={(e) => setNewUser({ ...newUser, displayName: e.target.value })} className="glass-input rounded-xl px-4 py-2.5 text-sm text-white placeholder:text-white/20" />
+   217→  1016→  1016→  1016→                      <input type="number" placeholder="Creditos" value={newUser.credits} onChange={(e) => setNewUser({ ...newUser, credits: e.target.value })} className="glass-input rounded-xl px-4 py-2.5 text-sm text-white placeholder:text-white/20" />
+   218→  1017→  1017→  1017→                      <button onClick={handleCreateUser} className="h-10 rounded-xl bg-white text-black text-xs font-medium tracking-wider hover:bg-white/90 transition-colors flex items-center justify-center gap-1.5"><UserPlus className="w-3.5 h-3.5" />CRIAR</button>
+   219→  1018→  1018→  1018→                    </div>
+   220→  1019→  1019→  1019→                  </div>
+   221→  1020→  1020→  1020→                  <div className="glass rounded-xl p-5">
+   222→  1021→  1021→  1021→                    <div className="flex items-center justify-between mb-4">
+   223→  1022→  1022→  1022→                      <h3 className="text-sm font-semibold tracking-wider text-white">Usuarios Cadastrados</h3>
+   224→  1023→  1023→  1023→                      <button onClick={fetchUsers} className="text-white/30 hover:text-white/60 transition-colors"><RefreshCw className="w-3.5 h-3.5" /></button>
+   225→  1024→  1024→  1024→                    </div>
+   226→  1025→  1025→  1025→                    <div className="max-h-96 overflow-y-auto custom-scrollbar space-y-1">
+   227→  1026→  1026→  1026→                      {users.length === 0 ? (<div className="text-center py-8"><User className="w-8 h-8 text-white/10 mx-auto mb-2" /><p className="text-sm text-white/20">Nenhum usuario.</p></div>) : users.map((u) => (
+   228→  1027→  1027→  1027→                        <div key={u.id} className={`flex items-center justify-between p-3 rounded-lg bg-white/[0.02] ${!u.isActive ? 'opacity-40' : ''}`}>
+   229→  1028→  1028→  1028→                          <div className="flex-1 min-w-0">
+   230→  1029→  1029→  1029→                            <div className="flex items-center gap-2">
+   231→  1030→  1030→  1030→                              <span className="text-sm font-medium text-white">{u.displayName}</span>
+   232→  1031→  1031→  1031→                              {!u.isActive && <Badge className="bg-red-500/10 text-red-400 border-red-500/20 text-[10px]">Inativo</Badge>}
+   233→  1032→  1032→  1032→                            </div>
+   234→  1033→  1033→  1033→                            <div className="flex items-center gap-3 mt-1 text-[11px] text-white/40">
+   235→  1034→  1034→  1034→                              <span>@{u.username}</span>
+   236→  1035→  1035→  1035→                              <span className="text-white/20">desde {new Date(u.createdAt).toLocaleDateString('pt-BR')}</span>
+   237→  1036→  1036→  1036→                            </div>
+   238→  1037→  1037→  1037→                          </div>
+   239→  1038→  1038→  1038→                          <div className="flex items-center gap-2">
+   240→  1039→  1039→  1039→                            {editingUser === u.id ? (
+   241→  1040→  1040→  1040→                              <div className="flex items-center gap-1">
+   242→  1041→  1041→  1041→                                <input type="number" value={editCredits} onChange={(e) => setEditCredits(e.target.value)} className="glass-input rounded-lg px-2 py-1 text-xs text-white w-20" />
+   243→  1042→  1042→  1042→                                <button onClick={() => handleUpdateCredits(u.id, Number(editCredits))} className="text-emerald-400 hover:text-emerald-300 p-1"><Check className="w-4 h-4" /></button>
+   244→  1043→  1043→  1043→                                <button onClick={() => setEditingUser(null)} className="text-white/30 hover:text-white/60 p-1"><X className="w-4 h-4" /></button>
+   245→  1044→  1044→  1044→                              </div>
+   246→  1045→  1045→  1045→                            ) : (
+   247→  1046→  1046→  1046→                              <button onClick={() => { setEditingUser(u.id); setEditCredits(String(u.credits)); }} className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 transition-colors">
+   248→  1047→  1047→  1047→                                <Coins className="w-3.5 h-3.5 text-amber-400" />
+   249→  1048→  1048→  1048→                                <span className="text-xs font-semibold text-amber-400">{u.credits}</span>
+   250→  1049→  1049→  1049→                              </button>
+   251→  1050→  1050→  1050→                            )}
+   252→  1051→  1051→  1051→                            <button onClick={() => handleDeleteUser(u.id)} className="text-white/20 hover:text-red-400 transition-colors p-1"><Trash2 className="w-3.5 h-3.5" /></button>
+   253→  1052→  1052→  1052→                          </div>
+   254→  1053→  1053→  1053→                        </div>
+   255→  1054→  1054→  1054→                      ))}
+   256→  1055→  1055→  1055→                    </div>
+   257→  1056→  1056→  1056→                  </div>
+   258→  1057→  1057→  1057→                </TabsContent>
+   259→  1058→  1058→  1058→
+   260→  1059→  1059→  1059→                {/* Tutorials Tab */}
+   261→  1060→  1060→  1060→                <TabsContent value="tutorials" className="space-y-3 mt-0">
+   262→  1061→  1061→  1061→                  <div className="glass rounded-xl p-5">
+   263→  1062→  1062→  1062→                    <h3 className="text-sm font-semibold tracking-wider text-white mb-4 flex items-center gap-2"><Play className="w-4 h-4 text-white/40" />Adicionar Tutorial</h3>
+   264→  1063→  1063→  1063→                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+   265→  1064→  1064→  1064→                      <input placeholder="Titulo do video" value={newTutorial.title} onChange={(e) => setNewTutorial({ ...newTutorial, title: e.target.value })} className="glass-input rounded-xl px-4 py-2.5 text-sm text-white placeholder:text-white/20" />
+   266→  1065→  1065→  1065→                      <input placeholder="URL do video (YouTube...)" value={newTutorial.url} onChange={(e) => setNewTutorial({ ...newTutorial, url: e.target.value })} className="glass-input rounded-xl px-4 py-2.5 text-sm text-white placeholder:text-white/20" />
+   267→  1066→  1066→  1066→                      <button onClick={handleCreateTutorial} className="h-10 rounded-xl bg-white text-black text-xs font-medium tracking-wider hover:bg-white/90 transition-colors flex items-center justify-center gap-1.5"><Play className="w-3.5 h-3.5" />ADICIONAR</button>
+   268→  1067→  1067→  1067→                    </div>
+   269→  1068→  1068→  1068→                  </div>
+   270→  1069→  1069→  1069→                  <div className="glass rounded-xl p-5">
+   271→  1070→  1070→  1070→                    <div className="flex items-center justify-between mb-4">
+   272→  1071→  1071→  1071→                      <h3 className="text-sm font-semibold tracking-wider text-white">Tutoriais Cadastrados</h3>
+   273→  1072→  1072→  1072→                      <button onClick={() => fetchTutorials(true)} className="text-white/30 hover:text-white/60 transition-colors"><RefreshCw className="w-3.5 h-3.5" /></button>
+   274→  1073→  1073→  1073→                    </div>
+   275→  1074→  1074→  1074→                    <div className="space-y-3 max-h-[500px] overflow-y-auto custom-scrollbar">
+   276→  1075→  1075→  1075→                      {tutorials.length === 0 ? (
+   277→  1076→  1076→  1076→                        <div className="text-center py-8"><Play className="w-8 h-8 text-white/10 mx-auto mb-2" /><p className="text-sm text-white/20">Nenhum tutorial.</p></div>
+   278→  1077→  1077→  1077→                      ) : tutorials.map((t) => (
+   279→  1078→  1078→  1078→                        <div key={t.id} className="flex items-start justify-between gap-3 p-3 rounded-lg bg-white/[0.02]">
+   280→  1079→  1079→  1079→                          <div className="flex-1 min-w-0">
+   281→  1080→  1080→  1080→                            <p className="text-sm font-medium text-white">{t.title}</p>
+   282→  1081→  1081→  1081→                            <p className="text-[11px] text-white/30 mt-0.5 truncate">{t.url}</p>
+   283→  1082→  1082→  1082→                          </div>
+   284→  1083→  1083→  1083→                          <button onClick={() => handleDeleteTutorial(t.id)} className="text-white/20 hover:text-red-400 transition-colors p-1 shrink-0"><Trash2 className="w-3.5 h-3.5" /></button>
+   285→  1084→  1084→  1084→                        </div>
+   286→  1085→  1085→  1085→                      ))}
+   287→  1086→  1086→  1086→                    </div>
+   288→  1087→  1087→  1087→                  </div>
+   289→  1088→  1088→  1088→                </TabsContent>
+   290→  1089→  1089→  1089→
+   291→  1090→  1090→  1090→                {/* Links Tab */}
+   292→  1091→  1091→  1091→                <TabsContent value="links" className="space-y-3 mt-0">
+   293→  1092→  1092→  1092→                  <div className="glass rounded-xl p-5">
+   294→  1093→  1093→  1093→                    <h3 className="text-sm font-semibold tracking-wider text-white mb-4 flex items-center gap-2"><Plus className="w-4 h-4 text-white/40" />Adicionar Link</h3>
+   295→  1094→  1094→  1094→                    <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+   296→  1095→  1095→  1095→                      <input placeholder="Titulo do link" value={newLink.title} onChange={(e) => setNewLink({ ...newLink, title: e.target.value })} className="glass-input rounded-xl px-4 py-2.5 text-sm text-white placeholder:text-white/20" />
+   297→  1096→  1096→  1096→                      <input placeholder="URL (https://...)" value={newLink.url} onChange={(e) => setNewLink({ ...newLink, url: e.target.value })} className="glass-input rounded-xl px-4 py-2.5 text-sm text-white placeholder:text-white/20" />
+   298→  1097→  1097→  1097→                      <input placeholder="Descricao (opcional)" value={newLink.description} onChange={(e) => setNewLink({ ...newLink, description: e.target.value })} className="glass-input rounded-xl px-4 py-2.5 text-sm text-white placeholder:text-white/20" />
+   299→  1098→  1098→  1098→                      <button onClick={handleCreateLink} className="h-10 rounded-xl bg-white text-black text-xs font-medium tracking-wider hover:bg-white/90 transition-colors flex items-center justify-center gap-1.5"><Plus className="w-3.5 h-3.5" />ADICIONAR</button>
+   300→  1099→  1099→  1099→                    </div>
+   301→  1100→  1100→  1100→                  </div>
+   302→  1101→  1101→  1101→                  <div className="glass rounded-xl p-5">
+   303→  1102→  1102→  1102→                    <div className="flex items-center justify-between mb-4">
+   304→  1103→  1103→  1103→                      <h3 className="text-sm font-semibold tracking-wider text-white">Links Cadastrados</h3>
+   305→  1104→  1104→  1104→                      <button onClick={() => fetchLinks(true)} className="text-white/30 hover:text-white/60 transition-colors"><RefreshCw className="w-3.5 h-3.5" /></button>
+   306→  1105→  1105→  1105→                    </div>
+   307→  1106→  1106→  1106→                    <div className="max-h-96 overflow-y-auto custom-scrollbar space-y-1">
+   308→  1107→  1107→  1107→                      {links.length === 0 ? (
+   309→  1108→  1108→  1108→                        <div className="text-center py-8"><Link2 className="w-8 h-8 text-white/10 mx-auto mb-2" /><p className="text-sm text-white/20">Nenhum link.</p></div>
+   310→  1109→  1109→  1109→                      ) : links.map((l) => (
+   311→  1110→  1110→  1110→                        <div key={l.id} className="flex items-start justify-between gap-3 p-3 rounded-lg bg-white/[0.02]">
+   312→  1111→  1111→  1111→                          <div className="flex-1 min-w-0">
+   313→  1112→  1112→  1112→                            <div className="flex items-center gap-2">
+   314→  1113→  1113→  1113→                              <p className="text-sm font-medium text-white">{l.title}</p>
+   315→  1114→  1114→  1114→                              {!l.isActive && <Badge className="bg-red-500/10 text-red-400 border-red-500/20 text-[10px]">Inativo</Badge>}
+   316→  1115→  1115→  1115→                            </div>
+   317→  1116→  1116→  1116→                            <p className="text-[11px] text-white/30 mt-0.5 truncate">{l.url}</p>
+   318→  1117→  1117→  1117→                            {l.description && <p className="text-[11px] text-white/20 mt-0.5">{l.description}</p>}
+   319→  1118→  1118→  1118→                          </div>
+   320→  1119→  1119→  1119→                          <button onClick={() => handleDeleteLink(l.id)} className="text-white/20 hover:text-red-400 transition-colors p-1 shrink-0"><Trash2 className="w-3.5 h-3.5" /></button>
+   321→  1120→  1120→  1120→                        </div>
+   322→  1121→  1121→  1121→                      ))}
+   323→  1122→  1122→  1122→                    </div>
+   324→  1123→  1123→  1123→                  </div>
+   325→  1124→  1124→  1124→                </TabsContent>
+   326→  1125→  1125→  1125→              </Tabs>
+   327→  1126→  1126→  1126→            </motion.div>
+   328→  1127→  1127→  1127→          )}
+   329→  1128→  1128→  1128→        </AnimatePresence>
+   330→  1129→  1129→  1129→      </main>
+   331→  1130→  1130→  1130→
+   332→  1131→  1131→  1131→      <footer className="relative z-10 border-t border-white/[0.05] mt-auto">
+   333→  1132→  1132→  1132→        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4 text-center"><p className="text-[11px] text-white/15 tracking-wider">Magnata Key Generator</p></div>
+   334→  1133→  1133→  1133→      </footer>
+   335→  1134→  1134→  1134→
+   336→  1135→  1135→  1135→      {/* Admin Login Modal */}
+   337→  1136→  1136→  1136→      <Dialog open={showAdminLogin} onOpenChange={setShowAdminLogin}>
+   338→  1137→  1137→  1137→        <DialogContent className="glass-strong rounded-2xl max-w-sm p-6 bg-transparent border-white/10">
+   339→  1138→  1138→  1138→          <DialogHeader><DialogTitle className="text-white text-base tracking-wider font-bold">Acesso Admin</DialogTitle><DialogDescription className="text-white/30 text-xs">Digite a senha de administrador</DialogDescription></DialogHeader>
+   340→  1139→  1139→  1139→          <div className="flex gap-2 mt-4">
+   341→  1140→  1140→  1140→            <input type="password" placeholder="Senha..." value={adminPassword} onChange={(e) => setAdminPassword(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleAdminLogin()} className="glass-input flex-1 rounded-xl px-4 py-2.5 text-sm text-white placeholder:text-white/20" />
+   342→  1141→  1141→  1141→            <button onClick={handleAdminLogin} disabled={loggingIn} className="h-10 w-10 rounded-xl bg-white text-black flex items-center justify-center hover:bg-white/90 transition-colors disabled:opacity-50">{loggingIn ? <RefreshCw className="w-4 h-4 animate-spin" /> : <ArrowRight className="w-4 h-4" />}</button>
+   343→  1142→  1142→  1142→          </div>
+   344→  1143→  1143→  1143→        </DialogContent>
+   345→  1144→  1144→  1144→      </Dialog>
+   346→  1145→  1145→  1145→
+   347→  1146→  1146→  1146→      {/* User Login Modal */}
+   348→  1147→  1147→  1147→      <Dialog open={showUserLogin} onOpenChange={setShowUserLogin}>
+   349→  1148→  1148→  1148→        <DialogContent className="glass-strong rounded-2xl max-w-sm p-6 bg-transparent border-white/10">
+   350→  1149→  1149→  1149→          <DialogHeader><DialogTitle className="text-white text-base tracking-wider font-bold">Login</DialogTitle><DialogDescription className="text-white/30 text-xs">Entre com seu usuario e senha</DialogDescription></DialogHeader>
+   351→  1150→  1150→  1150→          <div className="space-y-3 mt-4">
+   352→  1151→  1151→  1151→            <input placeholder="Usuario..." value={loginUsername} onChange={(e) => setLoginUsername(e.target.value)} className="glass-input w-full rounded-xl px-4 py-2.5 text-sm text-white placeholder:text-white/20" />
+   353→  1152→  1152→  1152→            <input type="password" placeholder="Senha..." value={loginPassword} onChange={(e) => setLoginPassword(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleUserLogin()} className="glass-input w-full rounded-xl px-4 py-2.5 text-sm text-white placeholder:text-white/20" />
+   354→  1153→  1153→  1153→            <button onClick={handleUserLogin} disabled={userLoggingIn} className="w-full h-10 rounded-xl bg-white text-black text-xs font-medium tracking-wider hover:bg-white/90 transition-colors disabled:opacity-50 flex items-center justify-center gap-1.5">
+   355→  1154→  1154→  1154→              {userLoggingIn ? <><RefreshCw className="w-4 h-4 animate-spin" /> Entrando...</> : <><LogIn className="w-4 h-4" /> ENTRAR</>}
+   356→  1155→  1155→  1155→            </button>
+   357→  1156→  1156→  1156→          </div>
+   358→  1157→  1157→  1157→        </DialogContent>
+   359→  1158→  1158→  1158→      </Dialog>
+   360→  1159→  1159→  1159→    </div>
+   361→  1160→  1160→  1160→  );
+   362→  1161→  1161→  1161→}

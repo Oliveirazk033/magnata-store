@@ -18,9 +18,11 @@ export async function GET(request: NextRequest) {
     let sql = `
       SELECT k.*, p.name as "productName", p.description as "productDescription",
              p.duration as "productDuration", p.credits as "productCredits",
-             p."isActive" as "productIsActive", p."createdAt" as "productCreatedAt"
+             p."isActive" as "productIsActive", p."createdAt" as "productCreatedAt",
+             c.name as "categoryName"
       FROM "Key" k
       LEFT JOIN "Product" p ON k."productId" = p.id
+      LEFT JOIN "Category" c ON p."categoryId" = c.id
     `;
     const args: unknown[] = [];
 
