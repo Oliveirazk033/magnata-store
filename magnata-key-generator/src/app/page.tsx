@@ -86,6 +86,7 @@ export default function Home() {
   const [addingKeysTo, setAddingKeysTo] = useState('');
   const [copiedKey, setCopiedKey] = useState(false);
   const [adminTab, setAdminTab] = useState('products');
+  const [userTab, setUserTab] = useState('generate');
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   // User management
@@ -350,6 +351,11 @@ export default function Home() {
   const copyKey = (key: string) => { navigator.clipboard.writeText(key); setCopiedKey(true); setTimeout(() => setCopiedKey(false), 2000); };
   const activeProducts = products.filter((p) => p.isActive);
 
+  const userNavItems = [
+    { icon: Key, label: 'Gerar Key', tab: 'generate' },
+    { icon: Play, label: 'Tutoriais', tab: 'tutorials' },
+  ];
+
   const navItems = isAdmin
     ? [
         { group: 'Principal', items: [{ icon: LayoutDashboard, label: 'Dashboard', tab: 'products' }] },
@@ -381,24 +387,41 @@ export default function Home() {
                 <button onClick={() => setSidebarOpen(false)} className="text-white/30 hover:text-white/60 transition-colors"><X className="w-4 h-4" /></button>
               </div>
               <div className="flex-1 space-y-6 overflow-y-auto custom-scrollbar">
-                {navItems.map((g) => (
-                  <div key={g.group}>
-                    <p className="text-[10px] uppercase tracking-wider text-white/25 px-2 mb-2">{g.group}</p>
-                    <div className="space-y-1">
-                      {g.items.map((item) => (
-                        <button key={item.tab} onClick={() => { setAdminTab(item.tab); setSidebarOpen(false); }}
-                          className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors ${adminTab === item.tab ? 'bg-white/10 text-white' : 'text-white/50 hover:bg-white/5 hover:text-white/80'}`}>
-                          <item.icon className="w-4 h-4" />{item.label}
-                        </button>
-                      ))}
+                {isAdmin ? (
+                  navItems.map((g) => (
+                    <div key={g.group}>
+                      <p className="text-[10px] uppercase tracking-wider text-white/25 px-2 mb-2">{g.group}</p>
+                      <div className="space-y-1">
+                        {g.items.map((item) => (
+                          <button key={item.tab} onClick={() => { setAdminTab(item.tab); setSidebarOpen(false); }}
+                            className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors ${adminTab === item.tab ? 'bg-white/10 text-white' : 'text-white/50 hover:bg-white/5 hover:text-white/80'}`}>
+                            <item.icon className="w-4 h-4" />{item.label}
+                          </button>
+                        ))}
+                      </div>
                     </div>
+                  ))
+                ) : (
+                  <div className="space-y-1">
+                    {userNavItems.map((item) => (
+                      <button key={item.tab} onClick={() => { setUserTab(item.tab); setSidebarOpen(false); }}
+                        className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors ${userTab === item.tab ? 'bg-white/10 text-white' : 'text-white/50 hover:bg-white/5 hover:text-white/80'}`}>
+                        <item.icon className="w-4 h-4" />{item.label}
+                      </button>
+                    ))}
                   </div>
-                ))}
+                )}
               </div>
               <Separator className="bg-white/5 my-4" />
-              <button onClick={() => { setIsAdmin(false); setSidebarOpen(false); }} className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-white/50 hover:bg-white/5 hover:text-white/80 transition-colors">
-                <Store className="w-4 h-4" />Ver Loja
-              </button>
+              {isAdmin ? (
+                <button onClick={() => { setIsAdmin(false); setSidebarOpen(false); }} className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-white/50 hover:bg-white/5 hover:text-white/80 transition-colors">
+                  <Store className="w-4 h-4" />Ver Loja
+                </button>
+              ) : (
+                <button onClick={() => { setShowAdminLogin(true); setSidebarOpen(false); }} className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-white/50 hover:bg-white/5 hover:text-white/80 transition-colors">
+                  <Lock className="w-4 h-4" />Admin
+                </button>
+              )}
             </motion.nav>
           </>
         )}
@@ -407,11 +430,9 @@ export default function Home() {
       {/* Header */}
       <header className="glass-nav h-14 sticky top-0 z-30 flex items-center justify-between px-4">
         <div className="flex items-center gap-3">
-          {isAdmin && (
-            <button onClick={() => setSidebarOpen(true)} className="text-white/50 hover:text-white/80 transition-colors">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="3" y1="6" x2="21" y2="6" /><line x1="3" y1="12" x2="21" y2="12" /><line x1="3" y1="18" x2="21" y2="18" /></svg>
-            </button>
-          )}
+          <button onClick={() => setSidebarOpen(true)} className="text-white/50 hover:text-white/80 transition-colors">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="3" y1="6" x2="21" y2="6" /><line x1="3" y1="12" x2="21" y2="12" /><line x1="3" y1="18" x2="21" y2="18" /></svg>
+          </button>
           <div className="flex items-center gap-2.5">
             <div className="w-7 h-7 rounded-lg bg-white/5 flex items-center justify-center border border-white/10"><Key className="w-3.5 h-3.5 text-white/60" /></div>
             <span className="text-sm font-bold tracking-wider text-white/90">Gerador Magnata</span>
@@ -469,7 +490,7 @@ export default function Home() {
                     <Button variant="ghost" onClick={() => { setDeliveredKey(null); refreshUser(); }} className="text-white/40 hover:text-white/70 hover:bg-white/5 text-xs tracking-wider">COMPRAR OUTRA</Button>
                   </div>
                 </div>
-              ) : (
+              ) : userTab === 'generate' ? (
                 <>
                   <div className="flex items-center gap-3 mb-6">
                     <Key className="w-5 h-5 text-white/40" />
@@ -517,31 +538,34 @@ export default function Home() {
                     </div>
                   )}
                 </>
-              )}
-              {userTutorials.length > 0 && (
-                <div className="mt-8">
-                  <div className="flex items-center gap-3 mb-4">
+              ) : userTab === 'tutorials' ? (
+                <div>
+                  <div className="flex items-center gap-3 mb-6">
                     <Play className="w-5 h-5 text-white/40" />
-                    <h2 className="text-lg font-bold tracking-wider text-white">Tutoriais</h2>
+                    <h1 className="text-xl font-bold tracking-wider text-white">Tutoriais</h1>
                   </div>
-                  <div className="space-y-4">
-                    {userTutorials.map((t) => (
-                      <motion.div key={t.id} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }} className="glass rounded-xl overflow-hidden">
-                        <p className="text-sm font-semibold text-white px-5 pt-4 pb-2">{t.title}</p>
-                        <div className="relative w-full" style={{ paddingBottom: '56.25%' }}>
-                          <iframe
-                            src={t.embedUrl}
-                            title={t.title}
-                            className="absolute inset-0 w-full h-full"
-                            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                            allowFullScreen
-                          />
-                        </div>
-                      </motion.div>
-                    ))}
-                  </div>
+                  {userTutorials.length === 0 ? (
+                    <div className="glass rounded-xl p-12 text-center"><Play className="w-10 h-10 text-white/10 mx-auto mb-3" /><p className="text-sm text-white/30">Nenhum tutorial disponivel.</p></div>
+                  ) : (
+                    <div className="space-y-4">
+                      {userTutorials.map((t) => (
+                        <motion.div key={t.id} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }} className="glass rounded-xl overflow-hidden">
+                          <p className="text-sm font-semibold text-white px-5 pt-4 pb-2">{t.title}</p>
+                          <div className="relative w-full" style={{ paddingBottom: '56.25%' }}>
+                            <iframe
+                              src={t.embedUrl}
+                              title={t.title}
+                              className="absolute inset-0 w-full h-full"
+                              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                              allowFullScreen
+                            />
+                          </div>
+                        </motion.div>
+                      ))}
+                    </div>
+                  )}
                 </div>
-              )}
+              ) : null}
             </motion.div>
           ) : (
             /* ====== ADMIN VIEW ====== */
