@@ -245,6 +245,10 @@ export default function Home() {
   useEffect(() => {
     if (isAdmin) { fetchTransactions(); fetchKeys(); fetchUsers(); fetchTutorials(true); fetchLinks(true); fetchCategories(true); }
   }, [isAdmin, fetchTransactions, fetchKeys, fetchUsers, fetchTutorials, fetchLinks, fetchCategories]);
+  // Ensure categories are loaded when switching to products tab
+  useEffect(() => {
+    if (isAdmin && adminTab === 'products' && categories.length === 0) { fetchCategories(true); }
+  }, [isAdmin, adminTab, categories.length, fetchCategories]);
   useEffect(() => { fetchUserHistory(); }, [fetchUserHistory]);
 
   // Refresh user credits after login
@@ -416,9 +420,22 @@ export default function Home() {
       if (data.category) {
         toast.success(`Categoria "${data.category.name}" criada!`);
         setNewCategory({ name: '', description: '' });
-        // Adicionar direto no estado + refetch de backup
-        setCategories((prev) => [...prev, { ...data.category, productCount: 0 }]);
-        fetchCategories(true);
+        // Add to state optimistically and refetch
+        const newCat = { ...data.category, productCount: 0, isActive: true, sortOrder: 0, createdAt: data.category.createdAt || new Date().toISOString(), description: data.category.description || null };
+        setCategories((prev) => {
+          if (prev.some(c => c.id === newCat.id)) return prev;
+          return [...prev, newCat];
+        });
+        // Delayed refetch to confirm, merge instead of overwrite
+        setTimeout(async () => {
+          try {
+            const r = await fetch('/api/categories', { headers: getAdminHeaders() });
+            if (r.ok) {
+              const d = await r.json();
+              if (d.categories) setCategories(d.categories);
+            }
+          } catch { /* keep optimistic state */ }
+        }, 500);
       } else { toast.error(data.error || 'Erro ao criar'); }
     } catch (err) {
       console.error('handleCreateCategory error:', err);
@@ -1003,13 +1020,13 @@ export default function Home() {
                       ) : categories.map((c) => (
                         <div key={c.id} className="flex items-center justify-between p-3 rounded-lg bg-white/[0.02] hover:bg-white/[0.04] transition-colors">
                           <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2">
-                              <span className="text-sm font-medium text-white truncate">{c.name}</span>
-                              {!c.isActive && <Badge className="bg-red-500/10 text-red-400 border-red-500/20 text-[10px]">Inativa</Badge>}
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="text-sm font-medium text-white break-words">{c.name}</span>
+                              {!c.isActive && <Badge className="bg-red-500/10 text-red-400 border-red-500/20 text-[10px] shrink-0">Inativa</Badge>}
                             </div>
                             <div className="flex items-center gap-3 mt-1 text-[11px] text-white/40">
                               <span>{c.productCount} produto{c.productCount !== 1 ? 's' : ''}</span>
-                              {c.description && <span className="text-white/20 truncate">{c.description}</span>}
+                              {c.description && <span className="text-white/20 break-words">{c.description}</span>}
                             </div>
                           </div>
                           <button onClick={() => handleDeleteCategory(c.id)} className="text-white/20 hover:text-red-400 transition-colors p-1"><Trash2 className="w-4 h-4" /></button>
@@ -1059,7 +1076,7 @@ export default function Home() {
                       {products.length === 0 ? (<p className="text-sm text-white/30 text-center py-6">Nenhum produto.</p>) : products.map((p) => (
                         <div key={p.id} className="flex items-center justify-between p-3 rounded-lg bg-white/[0.02] hover:bg-white/[0.04] transition-colors">
                           <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2"><span className="text-sm font-medium text-white truncate">{p.name}</span>{p.categoryName && <Badge className="bg-blue-500/10 text-blue-400 border-blue-500/20 text-[10px]"><Tag className="w-2.5 h-2.5 mr-0.5" />{p.categoryName}</Badge>}{!p.isActive && <Badge className="bg-red-500/10 text-red-400 border-red-500/20 text-[10px]">Inativo</Badge>}</div>
+                            <div className="flex items-center gap-2 flex-wrap"><span className="text-sm font-medium text-white">{p.name}</span>{p.categoryName && <Badge className="bg-blue-500/10 text-blue-400 border-blue-500/20 text-[10px] shrink-0"><Tag className="w-2.5 h-2.5 mr-0.5" />{p.categoryName}</Badge>}{!p.isActive && <Badge className="bg-red-500/10 text-red-400 border-red-500/20 text-[10px] shrink-0">Inativo</Badge>}</div>
                             <div className="flex items-center gap-3 mt-1 text-[11px] text-white/40"><span>{p.duration}</span><span className="text-emerald-400">{p.credits} cr.</span><span className={p._count.keys > 0 ? 'text-emerald-400' : 'text-red-400'}>{p._count.keys} keys</span></div>
                           </div>
                           <button onClick={() => handleDeleteProduct(p.id, p.name)} className="text-white/20 hover:text-red-400 transition-colors p-1"><Trash2 className="w-4 h-4" /></button>
