@@ -1,0 +1,588 @@
+     1→'use client';
+     2→
+     3→import { useState, useEffect, useCallback } from 'react';
+     4→import { motion, AnimatePresence } from 'framer-motion';
+     5→import { Button } from '@/components/ui/button';
+     6→import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+     7→import { Badge } from '@/components/ui/badge';
+     8→import { Input } from '@/components/ui/input';
+     9→import { Textarea } from '@/components/ui/textarea';
+    10→import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+    11→import { Separator } from '@/components/ui/separator';
+    12→import { Skeleton } from '@/components/ui/skeleton';
+    13→import {
+    14→  Dialog,
+    15→  DialogContent,
+    16→  DialogDescription,
+    17→  DialogHeader,
+    18→  DialogTitle,
+    19→  DialogTrigger,
+    20→} from '@/components/ui/dialog';
+    21→import { toast } from 'sonner';
+    22→import Starfield from '@/components/Starfield';
+    23→import {
+    24→  Key, Shield, Plus, Trash2, RefreshCw, Coins, ArrowRight,
+    25→  Lock, Unlock, History, Copy, Check, Store, BarChart3,
+    26→  Package, BookOpen, X, LayoutDashboard, Hash,
+    27→} from 'lucide-react';
+    28→
+    29→/* ===== Types ===== */
+    30→interface Product {
+    31→  id: string; name: string; description: string | null;
+    32→  duration: string; credits: number; isActive: boolean;
+    33→  _count: { keys: number };
+    34→}
+    35→interface TransactionItem {
+    36→  id: string; key: { code: string }; productName: string;
+    37→  credits: number; buyerInfo: string; createdAt: string;
+    38→}
+    39→interface KeyItem {
+    40→  id: string; code: string; productId: string;
+    41→  product: { name: string; duration: string };
+    42→  isSold: boolean; soldTo: string | null; soldAt: string | null; createdAt: string;
+    43→}
+    44→
+    45→/* ===== Main ===== */
+    46→export default function Home() {
+    47→  const [isAdmin, setIsAdmin] = useState(false);
+    48→  const [adminPassword, setAdminPassword] = useState('');
+    49→  const [loggingIn, setLoggingIn] = useState(false);
+    50→  const [showLoginModal, setShowLoginModal] = useState(false);
+    51→  const [products, setProducts] = useState<Product[]>([]);
+    52→  const [loadingProducts, setLoadingProducts] = useState(false);
+    53→  const [transactions, setTransactions] = useState<TransactionItem[]>([]);
+    54→  const [stats, setStats] = useState({ totalCredits: 0, totalSales: 0 });
+    55→  const [keys, setKeys] = useState<KeyItem[]>([]);
+    56→  const [selectedProductId, setSelectedProductId] = useState('');
+    57→  const [buyingProductId, setBuyingProductId] = useState<string | null>(null);
+    58→  const [buyerInfo, setBuyerInfo] = useState('');
+    59→  const [deliveredKey, setDeliveredKey] = useState<string | null>(null);
+    60→  const [deliveredProduct, setDeliveredProduct] = useState('');
+    61→  const [newProduct, setNewProduct] = useState({ name: '', description: '', duration: '', credits: '' });
+    62→  const [newKeysText, setNewKeysText] = useState('');
+    63→  const [addingKeysTo, setAddingKeysTo] = useState('');
+    64→  const [copiedKey, setCopiedKey] = useState(false);
+    65→  const [adminTab, setAdminTab] = useState('products');
+    66→  const [sidebarOpen, setSidebarOpen] = useState(false);
+    67→
+    68→  const getAdminHeaders = () => ({ 'x-admin-key': process.env.NEXT_PUBLIC_ADMIN_KEY || '' });
+    69→
+    70→  const fetchProducts = useCallback(async () => {
+    71→    setLoadingProducts(true);
+    72→    try {
+    73→      const res = await fetch('/api/products');
+    74→      const data = await res.json();
+    75→      if (data.products) setProducts(data.products);
+    76→    } catch { toast.error('Erro ao carregar produtos'); }
+    77→    finally { setLoadingProducts(false); }
+    78→  }, []);
+    79→
+    80→  const fetchTransactions = useCallback(async () => {
+    81→    try {
+    82→      const res = await fetch('/api/transactions', { headers: getAdminHeaders() });
+    83→      const data = await res.json();
+    84→      if (data.transactions) { setTransactions(data.transactions); setStats({ totalCredits: data.totalCredits, totalSales: data.totalSales }); }
+    85→    } catch { /* silent */ }
+    86→  }, []);
+    87→
+    88→  const fetchKeys = useCallback(async (productId?: string) => {
+    89→    try {
+    90→      const url = productId ? `/api/keys?productId=${productId}` : '/api/keys';
+    91→      const res = await fetch(url, { headers: getAdminHeaders() });
+    92→      const data = await res.json();
+    93→      if (data.keys) setKeys(data.keys);
+    94→    } catch { /* silent */ }
+    95→  }, []);
+    96→
+    97→  useEffect(() => { fetchProducts(); }, [fetchProducts]);
+    98→  useEffect(() => { if (isAdmin) { fetchTransactions(); fetchKeys(); } }, [isAdmin, fetchTransactions, fetchKeys]);
+    99→
+   100→  const handleLogin = async () => {
+   101→    setLoggingIn(true);
+   102→    try {
+   103→      const res = await fetch('/api/admin/auth', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password: adminPassword }) });
+   104→      const data = await res.json();
+   105→      if (data.success) { setIsAdmin(true); setShowLoginModal(false); toast.success('Login realizado'); }
+   106→      else toast.error('Senha incorreta');
+   107→    } catch { toast.error('Erro ao fazer login'); }
+   108→    finally { setLoggingIn(false); }
+   109→  };
+   110→
+   111→  const handleCreateProduct = async () => {
+   112→    if (!newProduct.name || !newProduct.duration || !newProduct.credits) { toast.error('Preencha todos os campos'); return; }
+   113→    try {
+   114→      const res = await fetch('/api/products', { method: 'POST', headers: { 'Content-Type': 'application/json', ...getAdminHeaders() }, body: JSON.stringify(newProduct) });
+   115→      const data = await res.json();
+   116→      if (data.product) { toast.success(`"${data.product.name}" criado!`); setNewProduct({ name: '', description: '', duration: '', credits: '' }); fetchProducts(); }
+   117→      else toast.error(data.error || 'Erro ao criar');
+   118→    } catch { toast.error('Erro'); }
+   119→  };
+   120→
+   121→  const handleAddKeys = async () => {
+   122→    if (!addingKeysTo || !newKeysText.trim()) { toast.error('Selecione produto e cole as keys'); return; }
+   123→    const codes = newKeysText.split('\n').map((l: string) => l.trim()).filter(Boolean);
+   124→    try {
+   125→      const res = await fetch('/api/keys', { method: 'POST', headers: { 'Content-Type': 'application/json', ...getAdminHeaders() }, body: JSON.stringify({ productId: addingKeysTo, codes }) });
+   126→      const data = await res.json();
+   127→      if (data.added > 0) { toast.success(data.message); setNewKeysText(''); fetchProducts(); fetchKeys(addingKeysTo); }
+   128→      else toast.error(data.error || 'Nenhuma key adicionada');
+   129→    } catch { toast.error('Erro'); }
+   130→  };
+   131→
+   132→  const handleDeleteProduct = async (id: string, name: string) => {
+   133→    if (!confirm(`Desativar "${name}"?`)) return;
+   134→    try {
+   135→      await fetch(`/api/products?id=${id}`, { method: 'DELETE', headers: getAdminHeaders() });
+   136→      toast.success('Produto desativado'); fetchProducts();
+   137→    } catch { toast.error('Erro'); }
+   138→  };
+   139→
+   140→  const handleDeleteKey = async (id: string) => {
+   141→    try {
+   142→      const res = await fetch(`/api/keys?id=${id}`, { method: 'DELETE', headers: getAdminHeaders() });
+   143→      const data = await res.json();
+   144→      if (data.success) { toast.success('Key removida'); fetchKeys(selectedProductId || undefined); fetchProducts(); }
+   145→      else toast.error(data.error || 'Erro');
+   146→    } catch { toast.error('Erro'); }
+   147→  };
+   148→
+   149→  const handleBuy = async (productId: string) => {
+   150→    if (!buyerInfo.trim()) { toast.error('Informe seu nome ou email'); return; }
+   151→    setBuyingProductId(productId); setDeliveredKey(null);
+   152→    try {
+   153→      const res = await fetch('/api/buy', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ productId, buyerInfo: buyerInfo.trim() }) });
+   154→      const data = await res.json();
+   155→      if (data.success) { setDeliveredKey(data.key); setDeliveredProduct(data.product); toast.success('Key gerada!'); fetchProducts(); }
+   156→      else toast.error(data.error || 'Erro na compra');
+   157→    } catch { toast.error('Erro'); }
+   158→    finally { setBuyingProductId(null); }
+   159→  };
+   160→
+   161→  const copyKey = (key: string) => { navigator.clipboard.writeText(key); setCopiedKey(true); setTimeout(() => setCopiedKey(false), 2000); };
+   162→  const activeProducts = products.filter((p) => p.isActive);
+   163→
+   164→  const navItems = isAdmin
+   165→    ? [
+   166→        { group: 'Principal', items: [{ icon: LayoutDashboard, label: 'Dashboard', tab: 'products' }] },
+   167→        { group: 'Estoque', items: [{ icon: Key, label: 'Produtos & Keys', tab: 'products' }, { icon: Package, label: 'Estoque', tab: 'stock' }, { icon: History, label: 'Histórico', tab: 'sales' }] },
+   168→      ]
+   169→    : [];
+   170→
+   171→  return (
+   172→    <div className="min-h-screen flex flex-col bg-[#0a0a0a] text-white relative">
+   173→      <Starfield />
+   174→
+   175→      {/* Sidebar Overlay */}
+   176→      <AnimatePresence>
+   177→        {sidebarOpen && (
+   178→          <>
+   179→            <motion.div
+   180→              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+   181→              className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40"
+   182→              onClick={() => setSidebarOpen(false)}
+   183→            />
+   184→            <motion.nav
+   185→              initial={{ x: -280 }} animate={{ x: 0 }} exit={{ x: -280 }}
+   186→              transition={{ type: 'spring', damping: 28, stiffness: 300 }}
+   187→              className="fixed left-0 top-0 bottom-0 w-[260px] z-50 flex flex-col p-4"
+   188→              style={{
+   189→                background: 'linear-gradient(180deg, rgba(8,8,8,0.78), rgba(4,4,4,0.72))',
+   190→                backdropFilter: 'blur(36px) saturate(180%)',
+   191→                borderRight: '1px solid rgba(255,255,255,0.05)',
+   192→              }}
+   193→            >
+   194→              <div className="flex items-center justify-between mb-6 px-2">
+   195→                <div className="flex items-center gap-3">
+   196→                  <div className="w-8 h-8 rounded-lg bg-white/5 flex items-center justify-center">
+   197→                    <Key className="w-4 h-4 text-white/60" />
+   198→                  </div>
+   199→                  <span className="text-sm font-semibold tracking-wider text-white">MAGNATA</span>
+   200→                </div>
+   201→                <button onClick={() => setSidebarOpen(false)} className="text-white/30 hover:text-white/60 transition-colors">
+   202→                  <X className="w-4 h-4" />
+   203→                </button>
+   204→              </div>
+   205→              <div className="flex-1 space-y-6 overflow-y-auto custom-scrollbar">
+   206→                {navItems.map((g) => (
+   207→                  <div key={g.group}>
+   208→                    <p className="text-[10px] uppercase tracking-wider text-white/25 px-2 mb-2">{g.group}</p>
+   209→                    <div className="space-y-1">
+   210→                      {g.items.map((item) => (
+   211→                        <button
+   212→                          key={item.tab}
+   213→                          onClick={() => { setAdminTab(item.tab); setSidebarOpen(false); }}
+   214→                          className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors ${
+   215→                            adminTab === item.tab ? 'bg-white/10 text-white' : 'text-white/50 hover:bg-white/5 hover:text-white/80'
+   216→                          }`}
+   217→                        >
+   218→                          <item.icon className="w-4 h-4" />
+   219→                          {item.label}
+   220→                        </button>
+   221→                      ))}
+   222→                    </div>
+   223→                  </div>
+   224→                ))}
+   225→              </div>
+   226→              <Separator className="bg-white/5 my-4" />
+   227→              <button
+   228→                onClick={() => { setIsAdmin(false); setSidebarOpen(false); }}
+   229→                className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-white/50 hover:bg-white/5 hover:text-white/80 transition-colors"
+   230→              >
+   231→                <Store className="w-4 h-4" />
+   232→                Ver Loja
+   233→              </button>
+   234→            </motion.nav>
+   235→          </>
+   236→        )}
+   237→      </AnimatePresence>
+   238→
+   239→      {/* Header */}
+   240→      <header className="glass-nav h-14 sticky top-0 z-30 flex items-center justify-between px-4">
+   241→        <div className="flex items-center gap-3">
+   242→          {isAdmin && (
+   243→            <button onClick={() => setSidebarOpen(true)} className="text-white/50 hover:text-white/80 transition-colors">
+   244→              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="3" y1="6" x2="21" y2="6" /><line x1="3" y1="12" x2="21" y2="12" /><line x1="3" y1="18" x2="21" y2="18" /></svg>
+   245→            </button>
+   246→          )}
+   247→          <div className="flex items-center gap-2.5">
+   248→            <div className="w-7 h-7 rounded-lg bg-white/5 flex items-center justify-center border border-white/10">
+   249→              <Key className="w-3.5 h-3.5 text-white/60" />
+   250→            </div>
+   251→            <span className="text-sm font-bold tracking-wider text-white/90">MAGNATA</span>
+   252→          </div>
+   253→        </div>
+   254→        <div className="flex items-center gap-2">
+   255→          {isAdmin ? (
+   256→            <Button
+   257→              variant="ghost" size="sm"
+   258→              onClick={() => setIsAdmin(false)}
+   259→              className="text-white/50 hover:text-white/80 hover:bg-white/5 text-xs tracking-wider"
+   260→            >
+   261→              <Store className="w-4 h-4 mr-1.5" />
+   262→              LOJA
+   263→            </Button>
+   264→          ) : (
+   265→            <Button
+   266→              variant="ghost" size="sm"
+   267→              onClick={() => setShowLoginModal(true)}
+   268→              className="text-white/50 hover:text-white/80 hover:bg-white/5 text-xs tracking-wider"
+   269→            >
+   270→              <Lock className="w-4 h-4 mr-1.5" />
+   271→              ADMIN
+   272→            </Button>
+   273→          )}
+   274→        </div>
+   275→      </header>
+   276→
+   277→      {/* Main Content */}
+   278→      <main className="flex-1 relative z-10 max-w-7xl mx-auto w-full p-4 md:p-6">
+   279→        <AnimatePresence mode="wait">
+   280→          {!isAdmin ? (
+   281→            /* ====== STORE VIEW ====== */
+   282→            <motion.div key="store" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -12 }} transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}>
+   283→              {/* Buy Result */}
+   284→              {deliveredKey ? (
+   285→                <div className="max-w-lg mx-auto mt-8">
+   286→                  <div className="glass-strong rounded-xl p-8 text-center space-y-5">
+   287→                    <motion.div initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={{ delay: 0.1 }}>
+   288→                      <div className="w-16 h-16 rounded-2xl bg-emerald-500/10 flex items-center justify-center mx-auto mb-4">
+   289→                        <Shield className="w-8 h-8 text-emerald-400" />
+   290→                      </div>
+   291→                      <h2 className="text-lg font-bold tracking-wider text-white">Key Gerada</h2>
+   292→                      <p className="text-sm text-white/50 mt-1">{deliveredProduct}</p>
+   293→                    </motion.div>
+   294→                    <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.25 }}>
+   295→                      <div className="glass-input rounded-xl p-4 flex items-center justify-between gap-3">
+   296→                        <code className="text-emerald-400 font-mono text-sm break-all text-left">{deliveredKey}</code>
+   297→                        <Button size="sm" variant="ghost" onClick={() => copyKey(deliveredKey)} className="text-white/30 hover:text-white/60 shrink-0">
+   298→                          {copiedKey ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
+   299→                        </Button>
+   300→                      </div>
+   301→                      <p className="text-[11px] text-white/20 mt-3">Copie sua key agora. Ela nao sera exibida novamente.</p>
+   302→                    </motion.div>
+   303→                    <Button variant="ghost" onClick={() => setDeliveredKey(null)} className="text-white/40 hover:text-white/70 hover:bg-white/5 text-xs tracking-wider">
+   304→                      COMPRAR OUTRA
+   305→                    </Button>
+   306→                  </div>
+   307→                </div>
+   308→              ) : (
+   309→                <>
+   310→                  <div className="flex items-center gap-3 mb-6">
+   311→                    <Key className="w-5 h-5 text-white/40" />
+   312→                    <h1 className="text-xl font-bold tracking-wider text-white">Gerar Key</h1>
+   313→                  </div>
+   314→                  {loadingProducts ? (
+   315→                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+   316→                      {[...Array(3)].map((_, i) => (
+   317→                        <div key={i} className="glass rounded-xl p-6 space-y-4"><div className="skeleton-shimmer h-5 w-32 rounded-lg" /><div className="skeleton-shimmer h-4 w-24 rounded-lg" /><div className="skeleton-shimmer h-10 w-full rounded-xl" /></div>
+   318→                      ))}
+   319→                    </div>
+   320→                  ) : activeProducts.length === 0 ? (
+   321→                    <div className="glass rounded-xl p-12 text-center">
+   322→                      <Package className="w-10 h-10 text-white/10 mx-auto mb-3" />
+   323→                      <p className="text-sm text-white/30">Nenhum produto disponivel.</p>
+   324→                    </div>
+   325→                  ) : (
+   326→                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+   327→                      {activeProducts.map((product, i) => (
+   328→                        <motion.div
+   329→                          key={product.id}
+   330→                          initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}
+   331→                          transition={{ delay: i * 0.05, duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
+   332→                          className="glass glass-hover rounded-xl p-5 h-full flex flex-col"
+   333→                        >
+   334→                          <div className="flex items-start justify-between mb-4">
+   335→                            <div>
+   336→                              <h3 className="text-sm font-semibold text-white">{product.name}</h3>
+   337→                              <p className="text-xs text-white/40 mt-0.5">{product.description || product.duration}</p>
+   338→                            </div>
+   339→                            <Badge className="bg-white/5 text-white/60 border-white/10 text-[10px] hover:bg-white/10">
+   340→                              <Coins className="w-3 h-3 mr-1" />
+   341→                              {product.credits}
+   342→                            </Badge>
+   343→                          </div>
+   344→                          <div className="space-y-2 flex-1">
+   345→                            <div className="flex justify-between text-xs">
+   346→                              <span className="text-white/40">Duracao</span>
+   347→                              <span className="text-white/80 font-medium">{product.duration}</span>
+   348→                            </div>
+   349→                            <div className="flex justify-between text-xs">
+   350→                              <span className="text-white/40">Custo</span>
+   351→                              <span className="text-emerald-400 font-semibold">{product.credits} credito{product.credits > 1 ? 's' : ''}</span>
+   352→                            </div>
+   353→                            <div className="flex justify-between text-xs">
+   354→                              <span className="text-white/40">Estoque</span>
+   355→                              <span className={product._count.keys > 0 ? 'text-white/80' : 'text-red-400'}>
+   356→                                {product._count.keys} disponive{l}
+   357→                              </span>
+   358→                            </div>
+   359→                          </div>
+   360→                          <div className="mt-4 space-y-2">
+   361→                            <input
+   362→                              placeholder="Seu nome ou email..."
+   363→                              value={buyerInfo}
+   364→                              onChange={(e) => setBuyerInfo(e.target.value)}
+   365→                              disabled={product._count.keys === 0}
+   366→                              className="glass-input w-full rounded-xl px-4 py-2.5 text-sm text-white placeholder:text-white/20 font-mono"
+   367→                            />
+   368→                            <button
+   369→                              disabled={product._count.keys === 0 || buyingProductId === product.id}
+   370→                              onClick={() => handleBuy(product.id)}
+   371→                              className="w-full h-9 rounded-xl bg-white text-black text-xs font-medium tracking-wider hover:bg-white/90 transition-colors disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center gap-1.5"
+   372→                            >
+   373→                              {buyingProductId === product.id ? (
+   374→                                <><RefreshCw className="w-3.5 h-3.5 animate-spin" /> Gerando...</>
+   375→                              ) : product._count.keys === 0 ? (
+   376→                                'ESGOTADO'
+   377→                              ) : (
+   378→                                <><Key className="w-3.5 h-3.5" /> GERAR KEY</>
+   379→                              )}
+   380→                            </button>
+   381→                          </div>
+   382→                        </motion.div>
+   383→                      ))}
+   384→                    </div>
+   385→                  )}
+   386→                </>
+   387→              )}
+   388→            </motion.div>
+   389→          ) : (
+   390→            /* ====== ADMIN VIEW ====== */
+   391→            <motion.div key="admin" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -12 }} transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}>
+   392→              {/* Stats */}
+   393→              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
+   394→                {[
+   395→                  { label: 'Produtos Ativos', value: activeProducts.length, color: 'text-white' },
+   396→                  { label: 'Keys em Estoque', value: activeProducts.reduce((s, p) => s + p._count.keys, 0), color: 'text-emerald-400' },
+   397→                  { label: 'Vendas Totais', value: stats.totalSales, color: 'text-white' },
+   398→                  { label: 'Creditos Movidos', value: stats.totalCredits, color: 'text-amber-400' },
+   399→                ].map((s, i) => (
+   400→                  <motion.div key={s.label} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }}>
+   401→                    <div className="glass rounded-xl p-4">
+   402→                      <p className="text-[10px] uppercase tracking-wider text-white/30">{s.label}</p>
+   403→                      <p className={`text-2xl font-bold mt-1 ${s.color}`}>{s.value}</p>
+   404→                    </div>
+   405→                  </motion.div>
+   406→                ))}
+   407→              </div>
+   408→
+   409→              <Tabs value={adminTab} onValueChange={setAdminTab}>
+   410→                <TabsList className="bg-white/[0.03] border border-white/[0.06] rounded-xl p-1 mb-4 w-full sm:w-auto">
+   411→                  {[
+   412→                    { value: 'products', icon: Key, label: 'Produtos & Keys' },
+   413→                    { value: 'stock', icon: Package, label: 'Estoque' },
+   414→                    { value: 'sales', icon: History, label: 'Historico' },
+   415→                  ].map((t) => (
+   416→                    <TabsTrigger
+   417→                      key={t.value} value={t.value}
+   418→                      className="data-[state=active]:bg-white/10 data-[state=active]:text-white text-white/40 rounded-lg text-xs tracking-wider gap-1.5"
+   419→                    >
+   420→                      <t.icon className="w-3.5 h-3.5" />
+   421→                      {t.label}
+   422→                    </TabsTrigger>
+   423→                  ))}
+   424→                </TabsList>
+   425→
+   426→                {/* Products Tab */}
+   427→                <TabsContent value="products" className="space-y-3 mt-0">
+   428→                  <div className="glass rounded-xl p-5">
+   429→                    <h3 className="text-sm font-semibold tracking-wider text-white mb-4 flex items-center gap-2">
+   430→                      <Plus className="w-4 h-4 text-white/40" />
+   431→                      Novo Produto
+   432→                    </h3>
+   433→                    <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+   434→                      <input placeholder="Nome" value={newProduct.name} onChange={(e) => setNewProduct({ ...newProduct, name: e.target.value })} className="glass-input rounded-xl px-4 py-2.5 text-sm text-white placeholder:text-white/20" />
+   435→                      <input placeholder="Duracao (1 dia)" value={newProduct.duration} onChange={(e) => setNewProduct({ ...newProduct, duration: e.target.value })} className="glass-input rounded-xl px-4 py-2.5 text-sm text-white placeholder:text-white/20" />
+   436→                      <input type="number" placeholder="Creditos" value={newProduct.credits} onChange={(e) => setNewProduct({ ...newProduct, credits: e.target.value })} className="glass-input rounded-xl px-4 py-2.5 text-sm text-white placeholder:text-white/20" />
+   437→                      <button onClick={handleCreateProduct} className="h-10 rounded-xl bg-white text-black text-xs font-medium tracking-wider hover:bg-white/90 transition-colors flex items-center justify-center gap-1.5">
+   438→                        <Plus className="w-3.5 h-3.5" />
+   439→                        CRIAR
+   440→                      </button>
+   441→                    </div>
+   442→                  </div>
+   443→                  <div className="glass rounded-xl p-5">
+   444→                    <h3 className="text-sm font-semibold tracking-wider text-white mb-4">Produtos Cadastrados</h3>
+   445→                    <div className="max-h-80 overflow-y-auto custom-scrollbar space-y-2">
+   446→                      {products.length === 0 ? (
+   447→                        <p className="text-sm text-white/30 text-center py-6">Nenhum produto cadastrado.</p>
+   448→                      ) : products.map((p) => (
+   449→                        <div key={p.id} className="flex items-center justify-between p-3 rounded-lg bg-white/[0.02] hover:bg-white/[0.04] transition-colors">
+   450→                          <div className="flex-1 min-w-0">
+   451→                            <div className="flex items-center gap-2">
+   452→                              <span className="text-sm font-medium text-white truncate">{p.name}</span>
+   453→                              {!p.isActive && <Badge className="bg-red-500/10 text-red-400 border-red-500/20 text-[10px]">Inativo</Badge>}
+   454→                            </div>
+   455→                            <div className="flex items-center gap-3 mt-1 text-[11px] text-white/40">
+   456→                              <span>{p.duration}</span>
+   457→                              <span className="text-emerald-400">{p.credits} cr.</span>
+   458→                              <span className={p._count.keys > 0 ? 'text-emerald-400' : 'text-red-400'}>{p._count.keys} keys</span>
+   459→                            </div>
+   460→                          </div>
+   461→                          <button onClick={() => handleDeleteProduct(p.id, p.name)} className="text-white/20 hover:text-red-400 transition-colors p-1">
+   462→                            <Trash2 className="w-4 h-4" />
+   463→                          </button>
+   464→                        </div>
+   465→                      ))}
+   466→                    </div>
+   467→                  </div>
+   468→                </TabsContent>
+   469→
+   470→                {/* Stock Tab */}
+   471→                <TabsContent value="stock" className="space-y-3 mt-0">
+   472→                  <div className="glass rounded-xl p-5">
+   473→                    <h3 className="text-sm font-semibold tracking-wider text-white mb-1 flex items-center gap-2">
+   474→                      <Plus className="w-4 h-4 text-white/40" />
+   475→                      Adicionar Keys
+   476→                    </h3>
+   477→                    <p className="text-[11px] text-white/25 mb-4">Cole uma key por linha</p>
+   478→                    <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+   479→                      <select value={addingKeysTo} onChange={(e) => setAddingKeysTo(e.target.value)} className="glass-input rounded-xl px-4 py-2.5 text-sm text-white/80">
+   480→                        <option value="">Selecione...</option>
+   481→                        {products.filter((p) => p.isActive).map((p) => (<option key={p.id} value={p.id}>{p.name} ({p.credits} cr.)</option>))}
+   482→                      </select>
+   483→                      <div className="sm:col-span-2">
+   484→                        <Textarea value={newKeysText} onChange={(e) => setNewKeysText(e.target.value)} rows={3} placeholder="Cole as keys aqui..." className="glass-input rounded-xl px-4 py-2.5 text-sm text-white font-mono placeholder:text-white/15 resize-none min-h-[88px]" />
+   485→                      </div>
+   486→                      <button onClick={handleAddKeys} disabled={!addingKeysTo || !newKeysText.trim()} className="h-auto rounded-xl bg-white text-black text-xs font-medium tracking-wider hover:bg-white/90 transition-colors disabled:opacity-30 flex items-center justify-center gap-1.5 py-3">
+   487→                        <Plus className="w-3.5 h-3.5" />
+   488→                        ADICIONAR
+   489→                      </button>
+   490→                    </div>
+   491→                  </div>
+   492→                  <div className="glass rounded-xl p-5">
+   493→                    <div className="flex items-center justify-between mb-4">
+   494→                      <h3 className="text-sm font-semibold tracking-wider text-white">Keys Cadastradas</h3>
+   495→                      <div className="flex gap-2 items-center">
+   496→                        <select value={selectedProductId} onChange={(e) => { setSelectedProductId(e.target.value); fetchKeys(e.target.value || undefined); }} className="glass-input rounded-lg px-2 py-1 text-[11px] text-white/60">
+   497→                          <option value="">Todos</option>
+   498→                          {products.map((p) => (<option key={p.id} value={p.id}>{p.name}</option>))}
+   499→                        </select>
+   500→                        <button onClick={() => fetchKeys(selectedProductId || undefined)} className="text-white/30 hover:text-white/60 transition-colors"><RefreshCw className="w-3.5 h-3.5" /></button>
+   501→                      </div>
+   502→                    </div>
+   503→                    <div className="max-h-96 overflow-y-auto custom-scrollbar space-y-1">
+   504→                      {keys.length === 0 ? (
+   505→                        <div className="text-center py-8"><Hash className="w-8 h-8 text-white/10 mx-auto mb-2" /><p className="text-sm text-white/20">Nenhuma key encontrada.</p></div>
+   506→                      ) : keys.map((k) => (
+   507→                        <div key={k.id} className={`flex items-center justify-between p-2.5 rounded-lg ${k.isSold ? 'opacity-40' : 'bg-white/[0.02]'}`}>
+   508→                          <div className="flex-1 min-w-0">
+   509→                            <div className="flex items-center gap-2">
+   510→                              <code className="text-xs font-mono text-white/80 truncate">{k.code}</code>
+   511→                              {k.isSold ? <Badge className="bg-red-500/10 text-red-400 border-red-500/20 text-[10px]">Vendida</Badge> : <Badge className="bg-emerald-500/10 text-emerald-400 border-emerald-500/20 text-[10px]">Disponivel</Badge>}
+   512→                            </div>
+   513→                            <p className="text-[10px] text-white/25 mt-0.5">{k.product.name} — {k.product.duration}</p>
+   514→                          </div>
+   515→                          {!k.isSold && <button onClick={() => handleDeleteKey(k.id)} className="text-white/20 hover:text-red-400 transition-colors p-1"><Trash2 className="w-3.5 h-3.5" /></button>}
+   516→                        </div>
+   517→                      ))}
+   518→                    </div>
+   519→                  </div>
+   520→                </TabsContent>
+   521→
+   522→                {/* Sales Tab */}
+   523→                <TabsContent value="sales" className="mt-0">
+   524→                  <div className="glass rounded-xl p-5">
+   525→                    <div className="flex items-center justify-between mb-4">
+   526→                      <h3 className="text-sm font-semibold tracking-wider text-white flex items-center gap-2">
+   527→                        <BarChart3 className="w-4 h-4 text-white/40" />
+   528→                        Historico de Vendas
+   529→                      </h3>
+   530→                      <button onClick={fetchTransactions} className="text-white/30 hover:text-white/60 transition-colors"><RefreshCw className="w-3.5 h-3.5" /></button>
+   531→                    </div>
+   532→                    <div className="max-h-96 overflow-y-auto custom-scrollbar space-y-1">
+   533→                      {transactions.length === 0 ? (
+   534→                        <div className="text-center py-8"><History className="w-8 h-8 text-white/10 mx-auto mb-2" /><p className="text-sm text-white/20">Nenhuma venda registrada.</p></div>
+   535→                      ) : transactions.map((t) => (
+   536→                        <div key={t.id} className="flex items-center justify-between p-3 rounded-lg bg-white/[0.02]">
+   537→                          <div className="flex-1 min-w-0">
+   538→                            <div className="flex items-center gap-2">
+   539→                              <span className="text-sm font-medium text-white">{t.productName}</span>
+   540→                              <Badge className="bg-amber-500/10 text-amber-400 border-amber-500/20 text-[10px]">{t.credits} cr.</Badge>
+   541→                            </div>
+   542→                            <div className="flex items-center gap-3 mt-1 text-[11px] text-white/30">
+   543→                              <span>{t.buyerInfo}</span>
+   544→                              <code className="text-emerald-400/70 font-mono">{t.key.code}</code>
+   545→                            </div>
+   546→                          </div>
+   547→                          <span className="text-[11px] text-white/20 shrink-0 ml-3">{new Date(t.createdAt).toLocaleString('pt-BR')}</span>
+   548→                        </div>
+   549→                      ))}
+   550→                    </div>
+   551→                  </div>
+   552→                </TabsContent>
+   553→              </Tabs>
+   554→            </motion.div>
+   555→          )}
+   556→        </AnimatePresence>
+   557→      </main>
+   558→
+   559→      {/* Footer */}
+   560→      <footer className="relative z-10 border-t border-white/[0.05] mt-auto">
+   561→        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4 text-center">
+   562→          <p className="text-[11px] text-white/15 tracking-wider">Magnata Key Generator</p>
+   563→        </div>
+   564→      </footer>
+   565→
+   566→      {/* Login Modal */}
+   567→      <Dialog open={showLoginModal} onOpenChange={setShowLoginModal}>
+   568→        <DialogContent className="glass-strong rounded-2xl max-w-sm p-6 bg-transparent border-white/10">
+   569→          <DialogHeader>
+   570→            <DialogTitle className="text-white text-base tracking-wider font-bold">Acesso Admin</DialogTitle>
+   571→            <DialogDescription className="text-white/30 text-xs">Digite a senha de administrador</DialogDescription>
+   572→          </DialogHeader>
+   573→          <div className="flex gap-2 mt-4">
+   574→            <input
+   575→              type="password" placeholder="Senha..."
+   576→              value={adminPassword} onChange={(e) => setAdminPassword(e.target.value)}
+   577→              onKeyDown={(e) => e.key === 'Enter' && handleLogin()}
+   578→              className="glass-input flex-1 rounded-xl px-4 py-2.5 text-sm text-white placeholder:text-white/20"
+   579→            />
+   580→            <button onClick={handleLogin} disabled={loggingIn} className="h-10 w-10 rounded-xl bg-white text-black flex items-center justify-center hover:bg-white/90 transition-colors disabled:opacity-50">
+   581→              {loggingIn ? <RefreshCw className="w-4 h-4 animate-spin" /> : <ArrowRight className="w-4 h-4" />}
+   582→            </button>
+   583→          </div>
+   584→        </DialogContent>
+   585→      </Dialog>
+   586→    </div>
+   587→  );
+   588→}
