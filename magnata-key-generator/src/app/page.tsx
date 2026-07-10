@@ -219,8 +219,8 @@ export default function Home() {
       const res = await fetch('/api/products', { method: 'POST', headers: { 'Content-Type': 'application/json', ...getAdminHeaders() }, body: JSON.stringify(newProduct) });
       const data = await res.json();
       if (data.product) { toast.success(`"${data.product.name}" criado!`); setNewProduct({ name: '', description: '', duration: '', credits: '' }); fetchProducts(); }
-      else toast.error(data.error || 'Erro ao criar');
-    } catch { toast.error('Erro'); }
+      else { toast.error(data.error || 'Erro ao criar'); alert('Erro: ' + (data.error || 'Erro ao criar')); }
+    } catch (err) { const msg = err instanceof Error ? err.message : 'Erro'; toast.error(msg); alert('Catch: ' + msg); }
   };
 
   const handleAddKeys = async () => {

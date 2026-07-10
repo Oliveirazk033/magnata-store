@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { db } from '@/lib/db';
+import { db, ensureTables } from '@/lib/db';
 
 // GET /api/products — Listar produtos ativos (público)
 export async function GET() {
   try {
+    await ensureTables();
     const products = await db.product.findMany({
       where: { isActive: true },
       include: { _count: { select: { keys: { where: { isSold: false } } } } },
@@ -24,11 +25,12 @@ export async function POST(request: NextRequest) {
   }
 
   try {
+    await ensureTables();
     const body = await request.json();
     const { name, description, duration, credits } = body;
 
     if (!name || !duration || credits === undefined) {
-      return NextResponse.json({ error: 'name, duration e credits são obrigatórios' }, { status: 400 });
+      return NextResponse.json({ error: 'name, duration e credits sao obrigatorios' }, { status: 400 });
     }
 
     const product = await db.product.create({
@@ -56,6 +58,7 @@ export async function DELETE(request: NextRequest) {
   }
 
   try {
+    await ensureTables();
     const product = await db.product.update({
       where: { id },
       data: { isActive: false },
