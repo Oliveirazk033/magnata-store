@@ -265,8 +265,8 @@ export default function Home() {
         setRemainingCredits(data.remainingCredits);
         setLoggedUser({ ...loggedUser, credits: data.remainingCredits });
         toast.success('Key gerada!'); fetchProducts();
-      } else toast.error(data.error || 'Erro');
-    } catch { toast.error('Erro'); }
+      } else { toast.error(data.error || 'Erro'); alert('Erro: ' + (data.error || 'Erro')); }
+    } catch (err) { const msg = err instanceof Error ? err.message : 'Erro de rede'; toast.error(msg); alert('Catch: ' + msg); }
     finally { setBuyingProductId(null); }
   };
 
