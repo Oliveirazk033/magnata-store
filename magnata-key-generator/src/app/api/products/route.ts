@@ -11,24 +11,26 @@ export async function GET(request: NextRequest) {
     const categoryId = searchParams.get('categoryId');
     const isAdmin = request.headers.get('x-admin-key') === process.env.ADMIN_SECRET;
 
-    let sql = `SELECT p.*, c.name as "categoryName" FROM "Product" p LEFT JOIN "Category" c ON p."categoryId" = c.id WHERE p."isActive" = 1`;
+    let sql: string;
     const args: unknown[] = [];
 
     if (categoryId) {
-      sql += ` AND p."categoryId" = ?`;
+      sql = `SELECT p.*, c.name as "categoryName" FROM "Product" p LEFT JOIN "Category" c ON p."categoryId" = c.id WHERE p."isActive" = 1 AND p."categoryId" = ? ORDER BY c."sortOrder" ASC, p."credits" ASC`;
       args.push(categoryId);
+    } else {
+      sql = `SELECT p.*, c.name as "categoryName" FROM "Product" p LEFT JOIN "Category" c ON p."categoryId" = c.id WHERE p."isActive" = 1 ORDER BY p."credits" ASC`;
     }
 
-    // For users: only show products in active categories
-    if (!isAdmin && categoryId) {
-      // categoryId already filtered, category must be active
-    } else if (!isAdmin) {
-      sql += ` AND (p."categoryId" IS NULL OR c."isActive" = 1)`;
+    let result;
+    try {
+      result = await client.execute({ sql, args });
+    } catch {
+      // Fallback: Category table or categoryId column might not exist yet
+      const fallbackSql = categoryId
+        ? `SELECT * FROM "Product" WHERE "isActive" = 1 AND "categoryId" = ? ORDER BY "credits" ASC`
+        : `SELECT * FROM "Product" WHERE "isActive" = 1 ORDER BY "credits" ASC`;
+      result = await client.execute({ sql: fallbackSql, args: categoryId ? [categoryId] : [] });
     }
-
-    sql += ` ORDER BY c."sortOrder" ASC, p."credits" ASC`;
-
-    const result = await client.execute({ sql, args });
     const products = result.rows.map((row: any) => ({
       id: row.id, name: row.name, description: row.description,
       duration: row.duration, credits: Number(row.credits),

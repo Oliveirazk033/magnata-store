@@ -8,14 +8,25 @@ export async function GET(request: NextRequest) {
     const client = getClient();
     const isAdmin = request.headers.get('x-admin-key') === process.env.ADMIN_SECRET;
 
-    const result = await client.execute({
-      sql: `SELECT c.*,
-        (SELECT COUNT(*) FROM "Product" p WHERE p."categoryId" = c.id AND p."isActive" = 1) as "productCount"
-        FROM "Category" c
-        ${!isAdmin ? 'WHERE c."isActive" = 1' : ''}
-        ORDER BY c."sortOrder" ASC, c."createdAt" ASC`,
-      args: [],
-    });
+    let result;
+    try {
+      result = await client.execute({
+        sql: `SELECT c.*,
+          (SELECT COUNT(*) FROM "Product" p WHERE p."categoryId" = c.id AND p."isActive" = 1) as "productCount"
+          FROM "Category" c
+          ${!isAdmin ? 'WHERE c."isActive" = 1' : ''}
+          ORDER BY c."sortOrder" ASC, c."createdAt" ASC`,
+        args: [],
+      });
+    } catch {
+      // Fallback: categoryId column might not exist yet on Product
+      result = await client.execute({
+        sql: `SELECT c.*, 0 as "productCount" FROM "Category" c
+          ${!isAdmin ? 'WHERE c."isActive" = 1' : ''}
+          ORDER BY c."sortOrder" ASC, c."createdAt" ASC`,
+        args: [],
+      });
+    }
 
     const categories = result.rows.map((row: any) => ({
       id: row.id as string,

@@ -31,6 +31,9 @@ export async function ensureTables() {
       if (!colNames.includes('categoryId')) {
         await client.execute(`ALTER TABLE "Product" ADD COLUMN "categoryId" TEXT`)
       }
-    } catch { /* column may already exist */ }
+    } catch (e) {
+      // Migration failed, try again next call
+      console.error('Migration error:', e)
+    }
   } catch { /* ok */ }
 }

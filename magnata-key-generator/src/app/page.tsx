@@ -139,11 +139,16 @@ export default function Home() {
     try {
       const headers = isAdminFetch ? { 'x-admin-key': adminPassword } : {};
       const res = await fetch('/api/categories', { headers });
+      if (!res.ok) { console.error('fetchCategories status:', res.status); return; }
       const data = await res.json();
       if (data.categories) {
         if (isAdminFetch) setCategories(data.categories);
+      } else if (data.error) {
+        console.error('fetchCategories error:', data.error);
       }
-    } catch { /* silent */ }
+    } catch (err) {
+      console.error('fetchCategories catch:', err);
+    }
   }, [adminPassword]);
 
   const fetchProducts = useCallback(async (catId?: string) => {
@@ -411,9 +416,14 @@ export default function Home() {
       if (data.category) {
         toast.success(`Categoria "${data.category.name}" criada!`);
         setNewCategory({ name: '', description: '' });
+        // Adicionar direto no estado + refetch de backup
+        setCategories((prev) => [...prev, { ...data.category, productCount: 0 }]);
         fetchCategories(true);
       } else { toast.error(data.error || 'Erro ao criar'); }
-    } catch { toast.error('Erro'); }
+    } catch (err) {
+      console.error('handleCreateCategory error:', err);
+      toast.error('Erro ao criar categoria');
+    }
   };
 
   const handleDeleteCategory = async (id: string) => {
