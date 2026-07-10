@@ -55,6 +55,10 @@ interface LinkItem {
   id: string; title: string; url: string; description: string | null;
   sortOrder: number; isActive: boolean; createdAt: string;
 }
+interface UserHistoryItem {
+  id: string; keyCode: string; productName: string;
+  credits: number; createdAt: string;
+}
 
 /* ===== Main ===== */
 export default function Home() {
@@ -92,7 +96,7 @@ export default function Home() {
   const [addingKeysTo, setAddingKeysTo] = useState('');
   const [copiedKey, setCopiedKey] = useState(false);
   const [adminTab, setAdminTab] = useState('products');
-  const [userTab, setUserTab] = useState('generate');
+  const [userTab, setUserTab] = useState('dashboard');
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   // User management
@@ -109,6 +113,12 @@ export default function Home() {
   const [links, setLinks] = useState<LinkItem[]>([]);
   const [userLinks, setUserLinks] = useState<LinkItem[]>([]);
   const [newLink, setNewLink] = useState({ title: '', url: '', description: '' });
+
+  // User history
+  const [userHistory, setUserHistory] = useState<UserHistoryItem[]>([]);
+  const [userTotalKeys, setUserTotalKeys] = useState(0);
+  const [userTotalCreditsUsed, setUserTotalCreditsUsed] = useState(0);
+  const [historySearch, setHistorySearch] = useState('');
 
   const getUserHeaders = () => loggedUser ? ({ 'x-user-id': loggedUser.id }) : {};
   const getAdminHeaders = () => ({ 'x-admin-key': adminPassword });
@@ -189,10 +199,24 @@ export default function Home() {
     } catch { /* silent */ }
   }, []);
 
+  const fetchUserHistory = useCallback(async () => {
+    if (!loggedUser) return;
+    try {
+      const res = await fetch('/api/user/history', { headers: { 'x-user-id': loggedUser.id } });
+      const data = await res.json();
+      if (data.transactions) {
+        setUserHistory(data.transactions);
+        setUserTotalKeys(data.totalKeys);
+        setUserTotalCreditsUsed(data.totalCreditsUsed);
+      }
+    } catch { /* silent */ }
+  }, [loggedUser?.id]);
+
   useEffect(() => { fetchProducts(); fetchUserTutorials(); fetchUserLinks(); }, [fetchProducts, fetchUserTutorials, fetchUserLinks]);
   useEffect(() => {
     if (isAdmin) { fetchTransactions(); fetchKeys(); fetchUsers(); fetchTutorials(true); fetchLinks(true); }
   }, [isAdmin, fetchTransactions, fetchKeys, fetchUsers, fetchTutorials, fetchLinks]);
+  useEffect(() => { fetchUserHistory(); }, [fetchUserHistory]);
 
   // Refresh user credits after login
   const refreshUser = async () => {
@@ -423,6 +447,7 @@ export default function Home() {
         setRemainingCredits(lastCredits);
         toast.success(`${generatedKeys.length} key${generatedKeys.length > 1 ? 's' : ''} gerada${generatedKeys.length > 1 ? 's' : ''}!`);
         fetchProducts();
+        fetchUserHistory();
       }
     } catch (err) { const msg = err instanceof Error ? err.message : 'Erro de rede'; toast.error(msg); }
     finally { setBuyingProductId(null); }
@@ -430,9 +455,14 @@ export default function Home() {
 
   const copyKey = (key: string) => { navigator.clipboard.writeText(key); setCopiedKey(true); setTimeout(() => setCopiedKey(false), 2000); };
   const activeProducts = products.filter((p) => p.isActive);
+  const filteredHistory = historySearch.trim()
+    ? userHistory.filter((h) => h.keyCode.toLowerCase().includes(historySearch.toLowerCase()) || h.productName.toLowerCase().includes(historySearch.toLowerCase()))
+    : userHistory;
 
   const userNavItems = [
+    { icon: LayoutDashboard, label: 'Dashboard', tab: 'dashboard' },
     { icon: Key, label: 'Gerar Key', tab: 'generate' },
+    { icon: History, label: 'Historico', tab: 'history' },
     { icon: Play, label: 'Tutoriais', tab: 'tutorials' },
     { icon: Link2, label: 'Links', tab: 'links' },
   ];
@@ -588,6 +618,62 @@ export default function Home() {
                     <Button variant="ghost" onClick={() => { setDeliveredKey(null); setDeliveredKeys([]); refreshUser(); }} className="text-white/40 hover:text-white/70 hover:bg-white/5 text-xs tracking-wider">COMPRAR OUTRA</Button>
                   </div>
                 </div>
+              ) : userTab === 'dashboard' ? (
+                <div>
+                  {loggedUser ? (
+                    <>
+                      <div className="mb-6">
+                        <h1 className="text-xl font-bold tracking-wider text-white">
+                          {new Date().getHours() < 12 ? 'Bom dia' : new Date().getHours() < 18 ? 'Boa tarde' : 'Boa noite'}, {loggedUser.displayName}!
+                        </h1>
+                        <p className="text-sm text-white/40 mt-1">Bem-vindo ao Gerador Magnata</p>
+                      </div>
+                      <div className="grid grid-cols-2 gap-3 mb-6">
+                        <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }}>
+                          <div className="glass rounded-xl p-4">
+                            <div className="flex items-center gap-2 mb-2"><Wallet className="w-4 h-4 text-amber-400" /><span className="text-[10px] uppercase tracking-wider text-white/30">Saldo Atual</span></div>
+                            <p className="text-2xl font-bold text-amber-400">{loggedUser.credits}</p>
+                            <p className="text-[11px] text-white/20 mt-1">creditos disponiveis</p>
+                          </div>
+                        </motion.div>
+                        <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
+                          <div className="glass rounded-xl p-4">
+                            <div className="flex items-center gap-2 mb-2"><Key className="w-4 h-4 text-emerald-400" /><span className="text-[10px] uppercase tracking-wider text-white/30">Keys Geradas</span></div>
+                            <p className="text-2xl font-bold text-white">{userTotalKeys}</p>
+                            <p className="text-[11px] text-white/20 mt-1">{userTotalCreditsUsed} creditos utilizados</p>
+                          </div>
+                        </motion.div>
+                      </div>
+                      <div className="glass rounded-xl p-5">
+                        <h3 className="text-sm font-semibold tracking-wider text-white mb-4 flex items-center gap-2"><Package className="w-4 h-4 text-white/40" />Estoque Disponivel</h3>
+                        {activeProducts.length === 0 ? (
+                          <p className="text-sm text-white/30 text-center py-4">Nenhum produto.</p>
+                        ) : (
+                          <div className="space-y-2">
+                            {activeProducts.map((p) => (
+                              <div key={p.id} className="flex items-center justify-between p-3 rounded-lg bg-white/[0.02]">
+                                <div>
+                                  <span className="text-sm font-medium text-white">{p.name}</span>
+                                  <span className="text-[11px] text-white/30 ml-2">{p.duration}</span>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <span className="text-[11px] text-white/40">{p.credits} cr.</span>
+                                  <Badge className={`text-[10px] ${p._count.keys > 0 ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'bg-red-500/10 text-red-400 border-red-500/20'}`}>{p._count.keys} disp.</Badge>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </>
+                  ) : (
+                    <div className="glass rounded-xl p-12 text-center">
+                      <Lock className="w-10 h-10 text-white/10 mx-auto mb-3" />
+                      <p className="text-sm text-white/30 mb-4">Faca login para ver seu dashboard.</p>
+                      <button onClick={() => setShowUserLogin(true)} className="h-10 px-6 rounded-xl bg-white text-black text-xs font-medium tracking-wider hover:bg-white/90 transition-colors">FAZER LOGIN</button>
+                    </div>
+                  )}
+                </div>
               ) : userTab === 'generate' ? (
                 <>
                   <div className="flex items-center gap-3 mb-6">
@@ -669,6 +755,55 @@ export default function Home() {
                     </div>
                   )}
                 </>
+              ) : userTab === 'history' ? (
+                <div>
+                  <div className="flex items-center gap-3 mb-4">
+                    <History className="w-5 h-5 text-white/40" />
+                    <h1 className="text-xl font-bold tracking-wider text-white">Historico de Keys</h1>
+                  </div>
+                  <p className="text-sm text-white/30 mb-4">Visualize todas as suas keys geradas</p>
+                  {!loggedUser ? (
+                    <div className="glass rounded-xl p-12 text-center">
+                      <Lock className="w-10 h-10 text-white/10 mx-auto mb-3" />
+                      <p className="text-sm text-white/30 mb-4">Faca login para ver seu historico.</p>
+                      <button onClick={() => setShowUserLogin(true)} className="h-10 px-6 rounded-xl bg-white text-black text-xs font-medium tracking-wider hover:bg-white/90 transition-colors">FAZER LOGIN</button>
+                    </div>
+                  ) : (
+                    <div className="glass rounded-xl p-5">
+                      <div className="flex items-center gap-2 mb-4">
+                        <input
+                          placeholder="Buscar por key..."
+                          value={historySearch}
+                          onChange={(e) => setHistorySearch(e.target.value)}
+                          className="glass-input flex-1 rounded-xl px-4 py-2.5 text-sm text-white placeholder:text-white/20"
+                        />
+                        <button onClick={fetchUserHistory} className="text-white/30 hover:text-white/60 transition-colors p-2"><RefreshCw className="w-4 h-4" /></button>
+                      </div>
+                      <p className="text-[11px] text-white/20 mb-3">{filteredHistory.length} registro{filteredHistory.length !== 1 ? 's' : ''}</p>
+                      <div className="max-h-[500px] overflow-y-auto custom-scrollbar space-y-1">
+                        {filteredHistory.length === 0 ? (
+                          <div className="text-center py-8"><History className="w-8 h-8 text-white/10 mx-auto mb-2" /><p className="text-sm text-white/20">{historySearch ? 'Nenhum resultado.' : 'Nenhuma key gerada.'}</p></div>
+                        ) : filteredHistory.map((h) => (
+                          <div key={h.id} className="flex items-center justify-between p-3 rounded-lg bg-white/[0.02]">
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2">
+                                <code className="text-xs font-mono text-emerald-400/80 truncate">{h.keyCode}</code>
+                              </div>
+                              <div className="flex items-center gap-3 mt-1 text-[11px] text-white/30">
+                                <span>{h.productName}</span>
+                                <span className="text-amber-400/60">{h.credits} cr.</span>
+                                <span>{new Date(h.createdAt).toLocaleString('pt-BR')}</span>
+                              </div>
+                            </div>
+                            <button onClick={() => { navigator.clipboard.writeText(h.keyCode); toast.success('Key copiada!'); }} className="text-white/20 hover:text-white/60 transition-colors p-1.5 shrink-0">
+                              <Copy className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
               ) : userTab === 'tutorials' ? (
                 <div>
                   <div className="flex items-center gap-3 mb-6">
