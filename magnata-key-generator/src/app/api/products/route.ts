@@ -21,10 +21,16 @@ export async function GET() {
 export async function POST(request: NextRequest) {
   const authHeader = request.headers.get('x-admin-key');
   if (authHeader !== process.env.ADMIN_SECRET) {
-    return NextResponse.json({ error: 'Acesso negado' }, { status: 403 });
+    return NextResponse.json({ error: 'Acesso negado', debug: { envSet: !!process.env.ADMIN_SECRET, envLen: process.env.ADMIN_SECRET?.length } }, { status: 403 });
   }
 
   try {
+    // Debug: check DATABASE_URL availability
+    const dbUrl = process.env.DATABASE_URL;
+    if (!dbUrl) {
+      return NextResponse.json({ error: 'DATABASE_URL nao configurada no Vercel. Va em Settings > Environment Variables e adicione DATABASE_URL com o valor do Turso.', envTest: { DATABASE_URL: 'undefined', ADMIN_SECRET: !!process.env.ADMIN_SECRET ? 'set' : 'not set' } }, { status: 500 });
+    }
+
     await ensureTables();
     const body = await request.json();
     const { name, description, duration, credits } = body;
