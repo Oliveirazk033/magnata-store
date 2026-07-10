@@ -22,7 +22,7 @@ import Starfield from '@/components/Starfield';
 import {
   Key, Shield, Plus, Trash2, RefreshCw, Coins, ArrowRight,
   Lock, Unlock, History, Copy, Check, Store, BarChart3,
-  Package, BookOpen, X, LayoutDashboard, Hash, User, UserPlus, LogIn, LogOut, Wallet, Play,
+  Package, BookOpen, X, LayoutDashboard, Hash, User, UserPlus, LogIn, LogOut, Wallet, Play, Link2, ExternalLink,
 } from 'lucide-react';
 
 /* ===== Types ===== */
@@ -49,6 +49,10 @@ interface LoggedUser {
 }
 interface TutorialItem {
   id: string; title: string; url: string; embedUrl: string;
+  sortOrder: number; isActive: boolean; createdAt: string;
+}
+interface LinkItem {
+  id: string; title: string; url: string; description: string | null;
   sortOrder: number; isActive: boolean; createdAt: string;
 }
 
@@ -98,6 +102,11 @@ export default function Home() {
   const [tutorials, setTutorials] = useState<TutorialItem[]>([]);
   const [userTutorials, setUserTutorials] = useState<TutorialItem[]>([]);
   const [newTutorial, setNewTutorial] = useState({ title: '', url: '' });
+
+  // Links
+  const [links, setLinks] = useState<LinkItem[]>([]);
+  const [userLinks, setUserLinks] = useState<LinkItem[]>([]);
+  const [newLink, setNewLink] = useState({ title: '', url: '', description: '' });
 
   const getUserHeaders = () => loggedUser ? ({ 'x-user-id': loggedUser.id }) : {};
   const getAdminHeaders = () => ({ 'x-admin-key': adminPassword });
@@ -158,10 +167,30 @@ export default function Home() {
     } catch { /* silent */ }
   }, []);
 
-  useEffect(() => { fetchProducts(); fetchUserTutorials(); }, [fetchProducts, fetchUserTutorials]);
+  const fetchLinks = useCallback(async (isAdminFetch: boolean) => {
+    try {
+      const headers = isAdminFetch ? { 'x-admin-key': adminPassword } : {};
+      const res = await fetch('/api/links', { headers });
+      const data = await res.json();
+      if (data.links) {
+        if (isAdminFetch) setLinks(data.links);
+        else setUserLinks(data.links);
+      }
+    } catch { /* silent */ }
+  }, [adminPassword]);
+
+  const fetchUserLinks = useCallback(async () => {
+    try {
+      const res = await fetch('/api/links');
+      const data = await res.json();
+      if (data.links) setUserLinks(data.links);
+    } catch { /* silent */ }
+  }, []);
+
+  useEffect(() => { fetchProducts(); fetchUserTutorials(); fetchUserLinks(); }, [fetchProducts, fetchUserTutorials, fetchUserLinks]);
   useEffect(() => {
-    if (isAdmin) { fetchTransactions(); fetchKeys(); fetchUsers(); fetchTutorials(true); }
-  }, [isAdmin, fetchTransactions, fetchKeys, fetchUsers, fetchTutorials]);
+    if (isAdmin) { fetchTransactions(); fetchKeys(); fetchUsers(); fetchTutorials(true); fetchLinks(true); }
+  }, [isAdmin, fetchTransactions, fetchKeys, fetchUsers, fetchTutorials, fetchLinks]);
 
   // Refresh user credits after login
   const refreshUser = async () => {
@@ -187,17 +216,19 @@ export default function Home() {
         setTimeout(async () => {
           const headers = { 'x-admin-key': adminPassword };
           try {
-            const [tRes, kRes, uRes, tutRes] = await Promise.all([
+            const [tRes, kRes, uRes, tutRes, lnkRes] = await Promise.all([
               fetch('/api/transactions', { headers }),
               fetch('/api/keys', { headers }),
               fetch('/api/auth/register', { headers }),
               fetch('/api/tutorials', { headers }),
+              fetch('/api/links', { headers }),
             ]);
-            const [tData, kData, uData, tutData] = await Promise.all([tRes.json(), kRes.json(), uRes.json(), tutRes.json()]);
+            const [tData, kData, uData, tutData, lnkData] = await Promise.all([tRes.json(), kRes.json(), uRes.json(), tutRes.json(), lnkRes.json()]);
             if (tData.transactions) { setTransactions(tData.transactions); setStats({ totalCredits: tData.totalCredits, totalSales: tData.totalSales }); }
             if (kData.keys) setKeys(kData.keys);
             if (uData.users) setUsers(uData.users);
             if (tutData.tutorials) setTutorials(tutData.tutorials);
+            if (lnkData.links) setLinks(lnkData.links);
           } catch (err) { console.error('Admin data fetch error:', err); }
         }, 100);
       }
@@ -293,6 +324,32 @@ export default function Home() {
     } catch { toast.error('Erro'); }
   };
 
+  const handleCreateLink = async () => {
+    if (!newLink.title.trim() || !newLink.url.trim()) { toast.error('Preencha titulo e URL do link'); return; }
+    try {
+      const res = await fetch('/api/links', {
+        method: 'POST', headers: { 'Content-Type': 'application/json', ...getAdminHeaders() },
+        body: JSON.stringify(newLink),
+      });
+      const data = await res.json();
+      if (data.link) {
+        toast.success(`Link "${data.link.title}" adicionado!`);
+        setNewLink({ title: '', url: '', description: '' });
+        fetchLinks(true);
+      } else { toast.error(data.error || 'Erro ao criar link'); }
+    } catch { toast.error('Erro'); }
+  };
+
+  const handleDeleteLink = async (id: string) => {
+    if (!confirm('Remover este link?')) return;
+    try {
+      const res = await fetch(`/api/links?id=${id}`, { method: 'DELETE', headers: getAdminHeaders() });
+      const data = await res.json();
+      if (data.success) { toast.success('Link removido'); fetchLinks(true); }
+      else toast.error(data.error || 'Erro');
+    } catch { toast.error('Erro'); }
+  };
+
   const handleCreateProduct = async () => {
     if (!newProduct.name || !newProduct.duration || !newProduct.credits) { toast.error('Preencha todos os campos'); return; }
     try {
@@ -354,13 +411,14 @@ export default function Home() {
   const userNavItems = [
     { icon: Key, label: 'Gerar Key', tab: 'generate' },
     { icon: Play, label: 'Tutoriais', tab: 'tutorials' },
+    { icon: Link2, label: 'Links', tab: 'links' },
   ];
 
   const navItems = isAdmin
     ? [
         { group: 'Principal', items: [{ icon: LayoutDashboard, label: 'Dashboard', tab: 'products' }] },
         { group: 'Estoque', items: [{ icon: Key, label: 'Produtos & Keys', tab: 'products' }, { icon: Package, label: 'Estoque', tab: 'stock' }, { icon: History, label: 'Historico', tab: 'sales' }] },
-        { group: 'Sistema', items: [{ icon: User, label: 'Usuarios', tab: 'users' }, { icon: Play, label: 'Tutoriais', tab: 'tutorials' }] },
+        { group: 'Sistema', items: [{ icon: User, label: 'Usuarios', tab: 'users' }, { icon: Play, label: 'Tutoriais', tab: 'tutorials' }, { icon: Link2, label: 'Links', tab: 'links' }] },
       ]
     : [];
 
@@ -565,6 +623,41 @@ export default function Home() {
                     </div>
                   )}
                 </div>
+              ) : userTab === 'links' ? (
+                <div>
+                  <div className="flex items-center gap-3 mb-6">
+                    <Link2 className="w-5 h-5 text-white/40" />
+                    <h1 className="text-xl font-bold tracking-wider text-white">Links</h1>
+                  </div>
+                  {userLinks.length === 0 ? (
+                    <div className="glass rounded-xl p-12 text-center"><Link2 className="w-10 h-10 text-white/10 mx-auto mb-3" /><p className="text-sm text-white/30">Nenhum link disponivel.</p></div>
+                  ) : (
+                    <div className="space-y-3">
+                      {userLinks.map((lnk, i) => (
+                        <motion.a
+                          key={lnk.id}
+                          href={lnk.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          initial={{ opacity: 0, y: 8 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          transition={{ delay: i * 0.05, duration: 0.3 }}
+                          className="glass glass-hover rounded-xl p-4 flex items-center gap-4 group cursor-pointer block"
+                        >
+                          <div className="w-10 h-10 rounded-xl bg-white/5 flex items-center justify-center shrink-0 group-hover:bg-white/10 transition-colors">
+                            <ExternalLink className="w-4 h-4 text-white/40 group-hover:text-white/70 transition-colors" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-semibold text-white group-hover:text-white/90 transition-colors">{lnk.title}</p>
+                            {lnk.description && <p className="text-xs text-white/30 mt-0.5 truncate">{lnk.description}</p>}
+                            <p className="text-[11px] text-white/15 mt-1 truncate">{lnk.url}</p>
+                          </div>
+                          <ArrowRight className="w-4 h-4 text-white/20 group-hover:text-white/50 group-hover:translate-x-0.5 transition-all shrink-0" />
+                        </motion.a>
+                      ))}
+                    </div>
+                  )}
+                </div>
               ) : null}
             </motion.div>
           ) : (
@@ -591,6 +684,7 @@ export default function Home() {
                     { value: 'sales', icon: History, label: 'Historico' },
                     { value: 'users', icon: User, label: 'Usuarios' },
                     { value: 'tutorials', icon: Play, label: 'Tutoriais' },
+                    { value: 'links', icon: Link2, label: 'Links' },
                   ].map((t) => (
                     <TabsTrigger key={t.value} value={t.value} className="data-[state=active]:bg-white/10 data-[state=active]:text-white text-white/40 rounded-lg text-xs tracking-wider gap-1.5">
                       <t.icon className="w-3.5 h-3.5" />{t.label}
@@ -758,6 +852,42 @@ export default function Home() {
                             <p className="text-[11px] text-white/30 mt-0.5 truncate">{t.url}</p>
                           </div>
                           <button onClick={() => handleDeleteTutorial(t.id)} className="text-white/20 hover:text-red-400 transition-colors p-1 shrink-0"><Trash2 className="w-3.5 h-3.5" /></button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </TabsContent>
+
+                {/* Links Tab */}
+                <TabsContent value="links" className="space-y-3 mt-0">
+                  <div className="glass rounded-xl p-5">
+                    <h3 className="text-sm font-semibold tracking-wider text-white mb-4 flex items-center gap-2"><Plus className="w-4 h-4 text-white/40" />Adicionar Link</h3>
+                    <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+                      <input placeholder="Titulo do link" value={newLink.title} onChange={(e) => setNewLink({ ...newLink, title: e.target.value })} className="glass-input rounded-xl px-4 py-2.5 text-sm text-white placeholder:text-white/20" />
+                      <input placeholder="URL (https://...)" value={newLink.url} onChange={(e) => setNewLink({ ...newLink, url: e.target.value })} className="glass-input rounded-xl px-4 py-2.5 text-sm text-white placeholder:text-white/20" />
+                      <input placeholder="Descricao (opcional)" value={newLink.description} onChange={(e) => setNewLink({ ...newLink, description: e.target.value })} className="glass-input rounded-xl px-4 py-2.5 text-sm text-white placeholder:text-white/20" />
+                      <button onClick={handleCreateLink} className="h-10 rounded-xl bg-white text-black text-xs font-medium tracking-wider hover:bg-white/90 transition-colors flex items-center justify-center gap-1.5"><Plus className="w-3.5 h-3.5" />ADICIONAR</button>
+                    </div>
+                  </div>
+                  <div className="glass rounded-xl p-5">
+                    <div className="flex items-center justify-between mb-4">
+                      <h3 className="text-sm font-semibold tracking-wider text-white">Links Cadastrados</h3>
+                      <button onClick={() => fetchLinks(true)} className="text-white/30 hover:text-white/60 transition-colors"><RefreshCw className="w-3.5 h-3.5" /></button>
+                    </div>
+                    <div className="max-h-96 overflow-y-auto custom-scrollbar space-y-1">
+                      {links.length === 0 ? (
+                        <div className="text-center py-8"><Link2 className="w-8 h-8 text-white/10 mx-auto mb-2" /><p className="text-sm text-white/20">Nenhum link.</p></div>
+                      ) : links.map((l) => (
+                        <div key={l.id} className="flex items-start justify-between gap-3 p-3 rounded-lg bg-white/[0.02]">
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2">
+                              <p className="text-sm font-medium text-white">{l.title}</p>
+                              {!l.isActive && <Badge className="bg-red-500/10 text-red-400 border-red-500/20 text-[10px]">Inativo</Badge>}
+                            </div>
+                            <p className="text-[11px] text-white/30 mt-0.5 truncate">{l.url}</p>
+                            {l.description && <p className="text-[11px] text-white/20 mt-0.5">{l.description}</p>}
+                          </div>
+                          <button onClick={() => handleDeleteLink(l.id)} className="text-white/20 hover:text-red-400 transition-colors p-1 shrink-0"><Trash2 className="w-3.5 h-3.5" /></button>
                         </div>
                       ))}
                     </div>
