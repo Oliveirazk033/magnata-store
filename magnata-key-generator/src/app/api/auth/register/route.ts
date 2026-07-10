@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { db } from '@/lib/db';
+import { db, ensureTables } from '@/lib/db';
 
 // POST /api/auth/register — Criar usuário (admin)
 export async function POST(request: NextRequest) {
@@ -9,18 +9,19 @@ export async function POST(request: NextRequest) {
   }
 
   try {
+    await ensureTables();
     const { username, password, displayName, credits } = await request.json();
 
     if (!username || !password || !displayName) {
       return NextResponse.json({ error: 'username, password e displayName são obrigatórios' }, { status: 400 });
     }
 
-    const existing = await db.user.findUnique({ where: { username } });
+    const existing = await db().user.findUnique({ where: { username } });
     if (existing) {
       return NextResponse.json({ error: 'Nome de usuário já existe' }, { status: 400 });
     }
 
-    const user = await db.user.create({
+    const user = await db().user.create({
       data: {
         username: username.trim().toLowerCase(),
         password,
@@ -44,7 +45,8 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const users = await db.user.findMany({
+    await ensureTables();
+    const users = await db().user.findMany({
       select: { id: true, username: true, displayName: true, credits: true, isActive: true, createdAt: true },
       orderBy: { createdAt: 'desc' },
     });
@@ -63,6 +65,7 @@ export async function PATCH(request: NextRequest) {
   }
 
   try {
+    await ensureTables();
     const { userId, credits, displayName, isActive } = await request.json();
 
     if (!userId) {
@@ -74,7 +77,7 @@ export async function PATCH(request: NextRequest) {
     if (displayName !== undefined) updateData.displayName = displayName;
     if (isActive !== undefined) updateData.isActive = isActive;
 
-    const user = await db.user.update({
+    const user = await db().user.update({
       where: { id: userId },
       data: updateData,
       select: { id: true, username: true, displayName: true, credits: true, isActive: true },
@@ -102,7 +105,8 @@ export async function DELETE(request: NextRequest) {
   }
 
   try {
-    await db.user.delete({ where: { id } });
+    await ensureTables();
+    await db().user.delete({ where: { id } });
     return NextResponse.json({ success: true, message: 'Usuário removido' });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Erro desconhecido';

@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { db } from '@/lib/db';
+import { db, ensureTables } from '@/lib/db';
 
 // POST /api/buy — Comprar uma key (usando créditos do usuário logado)
 export async function POST(request: NextRequest) {
   try {
+    await ensureTables();
     const { productId, buyerInfo } = await request.json();
     const userId = request.headers.get('x-user-id');
 
@@ -16,13 +17,13 @@ export async function POST(request: NextRequest) {
     }
 
     // Buscar usuário
-    const user = await db.user.findUnique({ where: { id: userId } });
+    const user = await db().user.findUnique({ where: { id: userId } });
     if (!user || !user.isActive) {
       return NextResponse.json({ error: 'Usuário inválido' }, { status: 401 });
     }
 
     // Buscar produto
-    const product = await db.product.findUnique({ where: { id: productId } });
+    const product = await db().product.findUnique({ where: { id: productId } });
     if (!product || !product.isActive) {
       return NextResponse.json({ error: 'Produto não encontrado ou indisponível' }, { status: 404 });
     }
@@ -35,7 +36,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Buscar uma key disponível
-    const availableKey = await db.key.findFirst({
+    const availableKey = await db().key.findFirst({
       where: { productId, isSold: false },
     });
 
@@ -45,7 +46,7 @@ export async function POST(request: NextRequest) {
 
     // Marcar como vendida, criar transação e descontar créditos em uma transação atômica
     const now = new Date();
-    const [soldKey, transaction] = await db.$transaction([
+    const [soldKey, transaction] = await db()().$transaction([
       db.key.update({
         where: { id: availableKey.id },
         data: { isSold: true, soldAt: now, soldTo: user.displayName || user.username },
@@ -62,7 +63,7 @@ export async function POST(request: NextRequest) {
     ]);
 
     // Descontar créditos do usuário
-    await db.user.update({
+    await db().user.update({
       where: { id: userId },
       data: { credits: { decrement: product.credits } },
     });

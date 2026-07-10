@@ -5,7 +5,7 @@ import { db, ensureTables } from '@/lib/db';
 export async function GET() {
   try {
     await ensureTables();
-    const products = await db.product.findMany({
+    const products = await db().product.findMany({
       where: { isActive: true },
       include: { _count: { select: { keys: { where: { isSold: false } } } } },
       orderBy: { credits: 'asc' },
@@ -33,7 +33,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'name, duration e credits sao obrigatorios' }, { status: 400 });
     }
 
-    const product = await db.product.create({
+    const product = await db().product.create({
       data: { name, description: description || null, duration, credits: Number(credits) },
     });
     return NextResponse.json({ product }, { status: 201 });
@@ -59,7 +59,7 @@ export async function DELETE(request: NextRequest) {
 
   try {
     await ensureTables();
-    const product = await db.product.update({
+    const product = await db().product.update({
       where: { id },
       data: { isActive: false },
     });

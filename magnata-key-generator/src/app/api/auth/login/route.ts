@@ -1,16 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { db } from '@/lib/db';
+import { db, ensureTables } from '@/lib/db';
 
 // POST /api/auth/login — Login do usuário
 export async function POST(request: NextRequest) {
   try {
+    await ensureTables();
     const { username, password } = await request.json();
 
     if (!username || !password) {
       return NextResponse.json({ error: 'Usuário e senha são obrigatórios' }, { status: 400 });
     }
 
-    const user = await db.user.findUnique({
+    const user = await db().user.findUnique({
       where: { username: username.trim().toLowerCase() },
     });
 
@@ -45,7 +46,8 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const user = await db.user.findUnique({
+    await ensureTables();
+    const user = await db().user.findUnique({
       where: { id: userId },
       select: { id: true, username: true, displayName: true, credits: true, isActive: true },
     });

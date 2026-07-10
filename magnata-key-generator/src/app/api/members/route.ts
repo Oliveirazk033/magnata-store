@@ -3,7 +3,7 @@ import { db } from '@/lib/db';
 
 export async function GET() {
   try {
-    const members = await db.discordMember.findMany({
+    const members = await db().discordMember.findMany({
       orderBy: { joinedAt: 'desc' },
     });
 
@@ -30,7 +30,7 @@ export async function GET() {
 
 export async function DELETE() {
   try {
-    const result = await db.discordMember.deleteMany();
+    const result = await db().discordMember.deleteMany();
     return NextResponse.json({
       success: true,
       deleted: result.count,

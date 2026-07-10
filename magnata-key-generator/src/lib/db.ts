@@ -6,27 +6,6 @@ const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined
 }
 
-function createDb() {
-  const dbUrl = process.env.DATABASE_URL
-  if (!dbUrl) throw new Error('DATABASE_URL is not set')
-
-  const libsql = createClient({ url: dbUrl })
-  const adapter = new PrismaLibSQL(libsql)
-  return new PrismaClient({ adapter })
-}
-
-// Lazy initialization — only connects when first used, not during build
-let _db: PrismaClient | null = null
-
-export function getDb() {
-  if (!_db) {
-    _db = globalForPrisma.prisma ?? createDb()
-    if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = _db
-  }
-  return _db
-}
-
-// Export ensureTables for use in API routes
 export async function ensureTables() {
   const dbUrl = process.env.DATABASE_URL
   if (!dbUrl) return
@@ -39,9 +18,21 @@ export async function ensureTables() {
   } catch { /* tables may already exist */ }
 }
 
-// For backwards compatibility
-export const db = new Proxy({} as PrismaClient, {
-  get(_target, prop) {
-    return (getDb() as unknown as Record<string | symbol, unknown>)[prop]
-  },
-})
+function createDb(): PrismaClient {
+  const dbUrl = process.env.DATABASE_URL
+  if (!dbUrl) throw new Error('DATABASE_URL is not set')
+
+  const libsql = createClient({ url: dbUrl })
+  const adapter = new PrismaLibSQL(libsql)
+  return new PrismaClient({ adapter })
+}
+
+let _db: PrismaClient | null = null
+
+export function db() {
+  if (!_db) {
+    _db = globalForPrisma.prisma ?? createDb()
+    if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = _db
+  }
+  return _db
+}

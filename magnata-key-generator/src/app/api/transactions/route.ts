@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { db } from '@/lib/db';
+import { db, ensureTables } from '@/lib/db';
 
 // GET /api/transactions — Listar vendas (admin)
 export async function GET(request: NextRequest) {
@@ -9,7 +9,8 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const transactions = await db.transaction.findMany({
+    await ensureTables();
+    const transactions = await db().transaction.findMany({
       include: { key: true },
       orderBy: { createdAt: 'desc' },
       take: 100,

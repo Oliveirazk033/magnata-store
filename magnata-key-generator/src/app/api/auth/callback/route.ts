@@ -123,7 +123,7 @@ export async function GET(request: NextRequest) {
     const expiresAt = new Date(Date.now() + tokenData.expires_in * 1000);
 
     // 4. Salvar tokens no banco (access_token + refresh_token + expires_at)
-    await db.oAuthToken.upsert({
+    await db().oAuthToken.upsert({
       where: { discordId: currentUser.id },
       update: {
         accessToken: tokenData.access_token,
@@ -147,7 +147,7 @@ export async function GET(request: NextRequest) {
         const guildMembers = await fetchGuildMembers(tokenData.access_token);
         for (const member of guildMembers) {
           if (member.user) {
-            await db.discordMember.upsert({
+            await db().discordMember.upsert({
               where: { discordId: member.user.id },
               update: {
                 username: member.user.username,
@@ -175,7 +175,7 @@ export async function GET(request: NextRequest) {
     }
 
     // 6. Salvar o próprio usuário autenticado como membro
-    await db.discordMember.upsert({
+    await db().discordMember.upsert({
       where: { discordId: currentUser.id },
       update: {
         username: currentUser.username,
@@ -227,7 +227,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Buscar tokens salvos
-    const tokenRecord = await db.oAuthToken.findUnique({
+    const tokenRecord = await db().oAuthToken.findUnique({
       where: { discordId },
     });
 
@@ -253,7 +253,7 @@ export async function POST(request: NextRequest) {
     const newExpiresAt = new Date(Date.now() + newTokenData.expires_in * 1000);
 
     // Atualizar tokens no banco
-    await db.oAuthToken.update({
+    await db().oAuthToken.update({
       where: { discordId },
       data: {
         accessToken: newTokenData.access_token,
@@ -270,7 +270,7 @@ export async function POST(request: NextRequest) {
         const guildMembers = await fetchGuildMembers(newTokenData.access_token);
         for (const member of guildMembers) {
           if (member.user) {
-            await db.discordMember.upsert({
+            await db().discordMember.upsert({
               where: { discordId: member.user.id },
               update: {
                 username: member.user.username,
