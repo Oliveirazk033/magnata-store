@@ -124,7 +124,8 @@ export default function Home() {
       const res = await fetch('/api/auth/register', { headers: { 'x-admin-key': adminPassword } });
       const data = await res.json();
       if (data.users) setUsers(data.users);
-    } catch { /* silent */ }
+      else if (data.error) { toast.error('Erro usuarios: ' + data.error); }
+    } catch (err) { const msg = err instanceof Error ? err.message : 'Erro'; toast.error('Fetch users: ' + msg); }
   }, [adminPassword]);
 
   useEffect(() => { fetchProducts(); }, [fetchProducts]);
@@ -148,7 +149,26 @@ export default function Home() {
     try {
       const res = await fetch('/api/admin/auth', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password: adminPassword }) });
       const data = await res.json();
-      if (data.success) { setIsAdmin(true); setShowAdminLogin(false); toast.success('Login admin realizado'); }
+      if (data.success) {
+        setIsAdmin(true);
+        setShowAdminLogin(false);
+        toast.success('Login admin realizado');
+        // Fetch admin data directly after login
+        setTimeout(async () => {
+          const headers = { 'x-admin-key': adminPassword };
+          try {
+            const [tRes, kRes, uRes] = await Promise.all([
+              fetch('/api/transactions', { headers }),
+              fetch('/api/keys', { headers }),
+              fetch('/api/auth/register', { headers }),
+            ]);
+            const [tData, kData, uData] = await Promise.all([tRes.json(), kRes.json(), uRes.json()]);
+            if (tData.transactions) { setTransactions(tData.transactions); setStats({ totalCredits: tData.totalCredits, totalSales: tData.totalSales }); }
+            if (kData.keys) setKeys(kData.keys);
+            if (uData.users) setUsers(uData.users);
+          } catch (err) { console.error('Admin data fetch error:', err); }
+        }, 100);
+      }
       else toast.error('Senha incorreta');
     } catch { toast.error('Erro ao fazer login'); }
     finally { setLoggingIn(false); }
