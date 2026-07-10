@@ -319,7 +319,7 @@ export default function Home() {
               <div className="flex items-center justify-between mb-6 px-2">
                 <div className="flex items-center gap-3">
                   <div className="w-8 h-8 rounded-lg bg-white/5 flex items-center justify-center"><Key className="w-4 h-4 text-white/60" /></div>
-                  <span className="text-sm font-semibold tracking-wider text-white">MAGNATA</span>
+                  <span className="text-sm font-semibold tracking-wider text-white">Gerador Magnata</span>
                 </div>
                 <button onClick={() => setSidebarOpen(false)} className="text-white/30 hover:text-white/60 transition-colors"><X className="w-4 h-4" /></button>
               </div>
@@ -357,7 +357,7 @@ export default function Home() {
           )}
           <div className="flex items-center gap-2.5">
             <div className="w-7 h-7 rounded-lg bg-white/5 flex items-center justify-center border border-white/10"><Key className="w-3.5 h-3.5 text-white/60" /></div>
-            <span className="text-sm font-bold tracking-wider text-white/90">MAGNATA</span>
+            <span className="text-sm font-bold tracking-wider text-white/90">Gerador Magnata</span>
           </div>
         </div>
         <div className="flex items-center gap-2">
