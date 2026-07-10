@@ -79,8 +79,10 @@ export default function Home() {
   const [keys, setKeys] = useState<KeyItem[]>([]);
   const [users, setUsers] = useState<UserData[]>([]);
   const [selectedProductId, setSelectedProductId] = useState('');
+  const [generateQuantity, setGenerateQuantity] = useState(1);
   const [buyingProductId, setBuyingProductId] = useState<string | null>(null);
   const [deliveredKey, setDeliveredKey] = useState<string | null>(null);
+  const [deliveredKeys, setDeliveredKeys] = useState<string[]>([]);
   const [deliveredProduct, setDeliveredProduct] = useState('');
   const [remainingCredits, setRemainingCredits] = useState(0);
 
@@ -257,6 +259,7 @@ export default function Home() {
   const handleUserLogout = () => {
     setLoggedUser(null);
     setDeliveredKey(null);
+    setDeliveredKeys([]);
     toast.success('Desconectado');
   };
 
@@ -388,20 +391,40 @@ export default function Home() {
     } catch { toast.error('Erro'); }
   };
 
-  const handleBuy = async (productId: string) => {
+  const handleBuy = async (productId: string, qty: number = 1) => {
     if (!loggedUser) { setShowUserLogin(true); return; }
-    setBuyingProductId(productId); setDeliveredKey(null);
+    setBuyingProductId(productId); setDeliveredKey(null); setDeliveredKeys([]);
     try {
-      const res = await fetch('/api/buy', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-user-id': loggedUser.id }, body: JSON.stringify({ productId }) });
-      const data = await res.json();
-      if (data.success) {
-        setDeliveredKey(data.key);
-        setDeliveredProduct(data.product);
-        setRemainingCredits(data.remainingCredits);
-        setLoggedUser({ ...loggedUser, credits: data.remainingCredits });
-        toast.success('Key gerada!'); fetchProducts();
-      } else { toast.error(data.error || 'Erro'); alert('Erro: ' + (data.error || 'Erro')); }
-    } catch (err) { const msg = err instanceof Error ? err.message : 'Erro de rede'; toast.error(msg); alert('Catch: ' + msg); }
+      const generatedKeys: string[] = [];
+      let lastProduct = '';
+      let lastCredits = loggedUser.credits;
+
+      for (let i = 0; i < qty; i++) {
+        const res = await fetch('/api/buy', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-user-id': loggedUser.id }, body: JSON.stringify({ productId }) });
+        const data = await res.json();
+        if (data.success) {
+          generatedKeys.push(data.key);
+          lastProduct = data.product;
+          lastCredits = data.remainingCredits;
+          setLoggedUser((prev) => prev ? { ...prev, credits: data.remainingCredits } : prev);
+        } else {
+          toast.error(data.error || 'Erro ao gerar key ' + (i + 1));
+          break;
+        }
+      }
+
+      if (generatedKeys.length > 0) {
+        if (generatedKeys.length === 1) {
+          setDeliveredKey(generatedKeys[0]);
+        } else {
+          setDeliveredKeys(generatedKeys);
+        }
+        setDeliveredProduct(lastProduct);
+        setRemainingCredits(lastCredits);
+        toast.success(`${generatedKeys.length} key${generatedKeys.length > 1 ? 's' : ''} gerada${generatedKeys.length > 1 ? 's' : ''}!`);
+        fetchProducts();
+      }
+    } catch (err) { const msg = err instanceof Error ? err.message : 'Erro de rede'; toast.error(msg); }
     finally { setBuyingProductId(null); }
   };
 
@@ -527,25 +550,42 @@ export default function Home() {
           {!isAdmin ? (
             /* ====== STORE VIEW ====== */
             <motion.div key="store" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -12 }} transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}>
-              {deliveredKey ? (
+              {deliveredKey || deliveredKeys.length > 0 ? (
                 <div className="max-w-lg mx-auto mt-8">
                   <div className="glass-strong rounded-xl p-8 text-center space-y-5">
                     <motion.div initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={{ delay: 0.1 }}>
                       <div className="w-16 h-16 rounded-2xl bg-emerald-500/10 flex items-center justify-center mx-auto mb-4"><Shield className="w-8 h-8 text-emerald-400" /></div>
-                      <h2 className="text-lg font-bold tracking-wider text-white">Key Gerada</h2>
+                      <h2 className="text-lg font-bold tracking-wider text-white">{deliveredKeys.length > 1 ? `${deliveredKeys.length} Keys Geradas` : 'Key Gerada'}</h2>
                       <p className="text-sm text-white/50 mt-1">{deliveredProduct}</p>
                     </motion.div>
                     <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.25 }}>
-                      <div className="glass-input rounded-xl p-4 flex items-center justify-between gap-3">
-                        <code className="text-emerald-400 font-mono text-sm break-all text-left">{deliveredKey}</code>
-                        <Button size="sm" variant="ghost" onClick={() => copyKey(deliveredKey)} className="text-white/30 hover:text-white/60 shrink-0">
-                          {copiedKey ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
-                        </Button>
-                      </div>
-                      <p className="text-[11px] text-white/20 mt-3">Copie sua key agora. Ela nao sera exibida novamente.</p>
+                      {deliveredKeys.length > 0 ? (
+                        <div className="space-y-2 text-left">
+                          {deliveredKeys.map((k, i) => (
+                            <div key={i} className="glass-input rounded-xl p-3 flex items-center justify-between gap-2">
+                              <div className="flex items-center gap-2 min-w-0">
+                                <span className="text-[10px] text-white/20 shrink-0">#{i + 1}</span>
+                                <code className="text-emerald-400 font-mono text-xs break-all">{k}</code>
+                              </div>
+                              <Button size="sm" variant="ghost" onClick={() => copyKey(k)} className="text-white/30 hover:text-white/60 shrink-0">
+                                {copiedKey ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                              </Button>
+                            </div>
+                          ))}
+                          <button onClick={() => { navigator.clipboard.writeText(deliveredKeys.join('\n')); toast.success('Todas as keys copiadas!'); }} className="w-full mt-2 py-2 rounded-lg bg-white/5 hover:bg-white/10 text-white/50 text-[11px] tracking-wider transition-colors">COPIAR TODAS</button>
+                        </div>
+                      ) : deliveredKey ? (
+                        <div className="glass-input rounded-xl p-4 flex items-center justify-between gap-3">
+                          <code className="text-emerald-400 font-mono text-sm break-all text-left">{deliveredKey}</code>
+                          <Button size="sm" variant="ghost" onClick={() => copyKey(deliveredKey)} className="text-white/30 hover:text-white/60 shrink-0">
+                            {copiedKey ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
+                          </Button>
+                        </div>
+                      ) : null}
+                      <p className="text-[11px] text-white/20 mt-3">Copie sua{deliveredKeys.length > 1 ? 's' : ''} key{deliveredKeys.length > 1 ? 's' : ''} agora. Ela{deliveredKeys.length > 1 ? 's' : ''} nao sera{deliveredKeys.length === 1 ? '' : 'o'} exibida{deliveredKeys.length === 1 ? '' : 's'} novamente.</p>
                       <p className="text-[11px] text-amber-400/60 mt-1">Créditos restantes: {remainingCredits}</p>
                     </motion.div>
-                    <Button variant="ghost" onClick={() => { setDeliveredKey(null); refreshUser(); }} className="text-white/40 hover:text-white/70 hover:bg-white/5 text-xs tracking-wider">COMPRAR OUTRA</Button>
+                    <Button variant="ghost" onClick={() => { setDeliveredKey(null); setDeliveredKeys([]); refreshUser(); }} className="text-white/40 hover:text-white/70 hover:bg-white/5 text-xs tracking-wider">COMPRAR OUTRA</Button>
                   </div>
                 </div>
               ) : userTab === 'generate' ? (
@@ -570,7 +610,7 @@ export default function Home() {
                         <label className="text-[11px] uppercase tracking-wider text-white/30 mb-2 block">Selecione o produto</label>
                         <select
                           value={selectedProductId}
-                          onChange={(e) => setSelectedProductId(e.target.value)}
+                          onChange={(e) => { setSelectedProductId(e.target.value); setGenerateQuantity(1); }}
                           className="glass-input w-full rounded-xl px-4 py-3 text-sm text-white bg-transparent"
                         >
                           <option value="">Escolha...</option>
@@ -584,20 +624,47 @@ export default function Home() {
                       {selectedProductId && (() => {
                         const prod = activeProducts.find((p) => p.id === selectedProductId);
                         if (!prod) return null;
+                        const totalCost = prod.credits * generateQuantity;
+                        const maxQty = Math.min(Math.floor(loggedUser.credits / prod.credits), prod._count.keys);
                         return (
-                          <div className="space-y-2 px-1">
-                            <div className="flex justify-between text-xs"><span className="text-white/40">Custo</span><span className="text-emerald-400 font-semibold">{prod.credits} credito{prod.credits > 1 ? 's' : ''}</span></div>
-                            <div className="flex justify-between text-xs"><span className="text-white/40">Estoque</span><span className={prod._count.keys > 0 ? 'text-white/80' : 'text-red-400'}>{prod._count.keys} disponiveis</span></div>
-                            <div className="flex justify-between text-xs"><span className="text-white/40">Seus creditos</span><span className={loggedUser.credits >= prod.credits ? 'text-amber-400 font-semibold' : 'text-red-400 font-semibold'}>{loggedUser.credits} cr.</span></div>
+                          <div className="space-y-3 px-1">
+                            <div className="space-y-2">
+                              <div className="flex justify-between text-xs"><span className="text-white/40">Duracao</span><span className="text-white/80 font-medium">{prod.duration}</span></div>
+                              <div className="flex justify-between text-xs"><span className="text-white/40">Custo por key</span><span className="text-emerald-400 font-semibold">{prod.credits} credito{prod.credits > 1 ? 's' : ''}</span></div>
+                              <div className="flex justify-between text-xs"><span className="text-white/40">Estoque</span><span className={prod._count.keys > 0 ? 'text-white/80' : 'text-red-400'}>{prod._count.keys} disponiveis</span></div>
+                              <div className="flex justify-between text-xs"><span className="text-white/40">Seus creditos</span><span className={loggedUser.credits >= prod.credits ? 'text-amber-400 font-semibold' : 'text-red-400 font-semibold'}>{loggedUser.credits} cr.</span></div>
+                            </div>
+                            <div className="pt-2 border-t border-white/5">
+                              <label className="text-[11px] uppercase tracking-wider text-white/30 mb-2 block">Quantidade de keys</label>
+                              <div className="flex items-center gap-3">
+                                <button
+                                  onClick={() => setGenerateQuantity((q) => Math.max(1, q - 1))}
+                                  className="w-10 h-10 rounded-xl bg-white/5 hover:bg-white/10 text-white/60 flex items-center justify-center text-lg font-medium transition-colors"
+                                >-</button>
+                                <input
+                                  type="number"
+                                  min={1}
+                                  max={maxQty || 1}
+                                  value={generateQuantity}
+                                  onChange={(e) => { const v = Math.max(1, Math.min(maxQty || 1, Number(e.target.value) || 1)); setGenerateQuantity(v); }}
+                                  className="glass-input w-20 rounded-xl px-3 py-2.5 text-sm text-white text-center font-semibold"
+                                />
+                                <button
+                                  onClick={() => setGenerateQuantity((q) => Math.min(maxQty || 1, q + 1))}
+                                  className="w-10 h-10 rounded-xl bg-white/5 hover:bg-white/10 text-white/60 flex items-center justify-center text-lg font-medium transition-colors"
+                                >+</button>
+                              </div>
+                              <p className="text-[11px] text-white/20 mt-1.5">Max: {maxQty} key{maxQty !== 1 ? 's' : ''} | Total: <span className="text-emerald-400/70">{totalCost} cr.</span></p>
+                            </div>
                           </div>
                         );
                       })()}
                       <button
-                        disabled={!selectedProductId || buyingProductId === selectedProductId || (() => { const p = activeProducts.find((p) => p.id === selectedProductId); return p ? (p._count.keys === 0 || loggedUser.credits < p.credits) : true; })()}
-                        onClick={() => selectedProductId && handleBuy(selectedProductId)}
+                        disabled={!selectedProductId || buyingProductId === selectedProductId || (() => { const p = activeProducts.find((p) => p.id === selectedProductId); return p ? (p._count.keys === 0 || loggedUser.credits < p.credits * generateQuantity) : true; })()}
+                        onClick={() => selectedProductId && handleBuy(selectedProductId, generateQuantity)}
                         className="w-full h-11 rounded-xl bg-white text-black text-xs font-medium tracking-wider hover:bg-white/90 transition-colors disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                       >
-                        {buyingProductId === selectedProductId ? (<><RefreshCw className="w-4 h-4 animate-spin" /> Gerando...</>) : (<><Key className="w-4 h-4" /> GERAR KEY</>)}
+                        {buyingProductId === selectedProductId ? (<><RefreshCw className="w-4 h-4 animate-spin" /> Gerando {generateQuantity > 1 ? `${generateQuantity} keys...` : '...'}</>) : (<><Key className="w-4 h-4" /> GERAR {generateQuantity > 1 ? `${generateQuantity} KEYS` : 'KEY'}</>)}
                       </button>
                     </div>
                   )}
