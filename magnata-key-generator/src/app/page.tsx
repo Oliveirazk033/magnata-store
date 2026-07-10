@@ -1011,6 +1011,19 @@ export default function Home() {
 
                 {/* Products Tab */}
                 <TabsContent value="products" className="space-y-3 mt-0">
+                  {/* Quick Create Category */}
+                  <div className="glass rounded-xl p-4">
+                    <div className="flex items-center gap-2 mb-3">
+                      <FolderOpen className="w-3.5 h-3.5 text-blue-400/60" />
+                      <h3 className="text-xs font-semibold tracking-wider text-white/60">Criar Categoria</h3>
+                    </div>
+                    <div className="flex gap-2">
+                      <input placeholder="Ex: IOS, Android, Windows..." value={newCategory.name} onChange={(e) => setNewCategory({ ...newCategory, name: e.target.value })} className="glass-input flex-1 rounded-xl px-3 py-2 text-sm text-white placeholder:text-white/20" />
+                      <button onClick={handleCreateCategory} className="h-9 px-4 rounded-xl bg-blue-500/10 text-blue-400 text-xs font-medium tracking-wider hover:bg-blue-500/20 transition-colors flex items-center justify-center gap-1.5 border border-blue-500/20 shrink-0"><Plus className="w-3.5 h-3.5" />CATEGORIA</button>
+                    </div>
+                  </div>
+
+                  {/* Create Product */}
                   <div className="glass rounded-xl p-5">
                     <h3 className="text-sm font-semibold tracking-wider text-white mb-4 flex items-center gap-2"><Plus className="w-4 h-4 text-white/40" />Novo Produto</h3>
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
