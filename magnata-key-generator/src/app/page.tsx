@@ -178,7 +178,7 @@ export default function Home() {
   };
 
   const handleCreateUser = async () => {
-    if (!newUser.username || !newUser.password || !newUser.displayName) { toast.error('Preencha todos os campos'); return; }
+    if (!newUser.username || !newUser.password || !newUser.displayName) { alert('Preencha todos os campos'); return; }
     try {
       const res = await fetch('/api/auth/register', {
         method: 'POST', headers: { 'Content-Type': 'application/json', ...getAdminHeaders() },
@@ -186,11 +186,11 @@ export default function Home() {
       });
       const data = await res.json();
       if (data.user) {
-        toast.success(`Usuário "${data.user.displayName}" criado com ${data.user.credits} créditos!`);
+        toast.success(`Usuario "${data.user.displayName}" criado com ${data.user.credits} creditos!`);
         setNewUser({ username: '', password: '', displayName: '', credits: '10' });
         fetchUsers();
-      } else toast.error(data.error || 'Erro ao criar');
-    } catch { toast.error('Erro'); }
+      } else { alert('Erro: ' + (data.error || 'Erro ao criar')); toast.error(data.error || 'Erro ao criar'); }
+    } catch (err) { const msg = err instanceof Error ? err.message : 'Erro'; alert('Catch: ' + msg); }
   };
 
   const handleUpdateCredits = async (userId: string, credits: number) => {
@@ -200,17 +200,19 @@ export default function Home() {
         body: JSON.stringify({ userId, credits }),
       });
       const data = await res.json();
-      if (data.user) { toast.success(`Créditos atualizados para ${data.user.credits}`); setEditingUser(null); fetchUsers(); }
-      else toast.error(data.error || 'Erro');
-    } catch { toast.error('Erro'); }
+      if (data.user) { toast.success(`Creditos atualizados para ${data.user.credits}`); setEditingUser(null); fetchUsers(); }
+      else { alert('Erro: ' + (data.error || 'Erro')); toast.error(data.error || 'Erro'); }
+    } catch (err) { const msg = err instanceof Error ? err.message : 'Erro'; alert('Catch: ' + msg); }
   };
 
   const handleDeleteUser = async (userId: string) => {
     if (!confirm('Deletar este usuário?')) return;
     try {
-      await fetch(`/api/auth/register?id=${userId}`, { method: 'DELETE', headers: getAdminHeaders() });
-      toast.success('Usuário removido'); fetchUsers();
-    } catch { toast.error('Erro'); }
+      const res = await fetch(`/api/auth/register?id=${userId}`, { method: 'DELETE', headers: getAdminHeaders() });
+      const data = await res.json();
+      if (data.success) { toast.success('Usuario removido'); fetchUsers(); }
+      else { alert('Erro: ' + (data.error || 'Erro')); toast.error(data.error || 'Erro'); }
+    } catch (err) { const msg = err instanceof Error ? err.message : 'Erro'; alert('Catch: ' + msg); }
   };
 
   const handleCreateProduct = async () => {
@@ -219,8 +221,8 @@ export default function Home() {
       const res = await fetch('/api/products', { method: 'POST', headers: { 'Content-Type': 'application/json', ...getAdminHeaders() }, body: JSON.stringify(newProduct) });
       const data = await res.json();
       if (data.product) { toast.success(`"${data.product.name}" criado!`); setNewProduct({ name: '', description: '', duration: '', credits: '' }); fetchProducts(); }
-      else { toast.error(data.error || 'Erro ao criar'); alert('Erro: ' + (data.error || 'Erro ao criar')); }
-    } catch (err) { const msg = err instanceof Error ? err.message : 'Erro'; toast.error(msg); alert('Catch: ' + msg); }
+      else toast.error(data.error || 'Erro ao criar');
+    } catch { toast.error('Erro'); }
   };
 
   const handleAddKeys = async () => {
