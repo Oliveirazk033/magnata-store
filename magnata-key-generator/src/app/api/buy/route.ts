@@ -60,35 +60,23 @@ export async function POST(request: NextRequest) {
     const availableKey = availableKeyResult.rows[0];
     const now = new Date().toISOString();
     const buyerInfo = (user.displayName as string) || (user.username as string);
+    const transactionId = 't_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8);
 
-    // Marcar como vendida, criar transação e descontar créditos em uma transação atômica
-    await client.execute('BEGIN');
-
-    try {
-      // Marcar key como vendida
-      await client.execute({
-        sql: `UPDATE "Key" SET "isSold" = 1, "soldAt" = ?, "soldTo" = ? WHERE id = ?`,
+    // Usar batch para executar tudo em uma única transação (funciona no Turso)
+    await client.batch([
+      {
+        sql: `UPDATE "Key" SET "isSold" = 1, "soldAt" = ?, "soldTo" = ? WHERE id = ? AND "isSold" = 0`,
         args: [now, buyerInfo, availableKey.id as string],
-      });
-
-      // Criar transação
-      const transactionId = 't_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8);
-      await client.execute({
+      },
+      {
         sql: `INSERT INTO "Transaction" (id, "keyId", "productName", credits, "buyerInfo", "userId") VALUES (?, ?, ?, ?, ?, ?)`,
         args: [transactionId, availableKey.id as string, product.name as string, productCredits, buyerInfo, userId],
-      });
-
-      // Descontar créditos do usuário
-      await client.execute({
+      },
+      {
         sql: `UPDATE "User" SET credits = credits - ? WHERE id = ?`,
         args: [productCredits, userId],
-      });
-
-      await client.execute('COMMIT');
-    } catch (txError) {
-      await client.execute('ROLLBACK');
-      throw txError;
-    }
+      },
+    ]);
 
     return NextResponse.json({
       success: true,
