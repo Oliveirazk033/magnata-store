@@ -104,28 +104,28 @@ export default function Home() {
 
   const fetchTransactions = useCallback(async () => {
     try {
-      const res = await fetch('/api/transactions', { headers: getAdminHeaders() });
+      const res = await fetch('/api/transactions', { headers: { 'x-admin-key': adminPassword } });
       const data = await res.json();
       if (data.transactions) { setTransactions(data.transactions); setStats({ totalCredits: data.totalCredits, totalSales: data.totalSales }); }
     } catch { /* silent */ }
-  }, []);
+  }, [adminPassword]);
 
   const fetchKeys = useCallback(async (productId?: string) => {
     try {
       const url = productId ? `/api/keys?productId=${productId}` : '/api/keys';
-      const res = await fetch(url, { headers: getAdminHeaders() });
+      const res = await fetch(url, { headers: { 'x-admin-key': adminPassword } });
       const data = await res.json();
       if (data.keys) setKeys(data.keys);
     } catch { /* silent */ }
-  }, []);
+  }, [adminPassword]);
 
   const fetchUsers = useCallback(async () => {
     try {
-      const res = await fetch('/api/auth/register', { headers: getAdminHeaders() });
+      const res = await fetch('/api/auth/register', { headers: { 'x-admin-key': adminPassword } });
       const data = await res.json();
       if (data.users) setUsers(data.users);
     } catch { /* silent */ }
-  }, []);
+  }, [adminPassword]);
 
   useEffect(() => { fetchProducts(); }, [fetchProducts]);
   useEffect(() => {
