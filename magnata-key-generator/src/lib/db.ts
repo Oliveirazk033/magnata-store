@@ -23,5 +23,14 @@ export async function ensureTables() {
     await client.execute(`CREATE TABLE IF NOT EXISTS "User" ("id" TEXT NOT NULL PRIMARY KEY, "username" TEXT NOT NULL, "password" TEXT NOT NULL, "displayName" TEXT NOT NULL, "credits" INTEGER NOT NULL DEFAULT 0, "isActive" BOOLEAN NOT NULL DEFAULT 1, "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, "updatedAt" DATETIME NOT NULL, CONSTRAINT "User_username_key" UNIQUE ("username"))`)
     await client.execute(`CREATE TABLE IF NOT EXISTS "Tutorial" ("id" TEXT NOT NULL PRIMARY KEY, "title" TEXT NOT NULL, "url" TEXT NOT NULL, "sortOrder" INTEGER NOT NULL DEFAULT 0, "isActive" BOOLEAN NOT NULL DEFAULT 1, "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP)`)
     await client.execute(`CREATE TABLE IF NOT EXISTS "Link" ("id" TEXT NOT NULL PRIMARY KEY, "title" TEXT NOT NULL, "url" TEXT NOT NULL, "description" TEXT, "sortOrder" INTEGER NOT NULL DEFAULT 0, "isActive" BOOLEAN NOT NULL DEFAULT 1, "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP)`)
+
+    // Migrations: add missing columns to existing tables
+    try {
+      const cols = await client.execute(`PRAGMA table_info("Product")`)
+      const colNames = cols.rows.map((r: any) => r.name)
+      if (!colNames.includes('categoryId')) {
+        await client.execute(`ALTER TABLE "Product" ADD COLUMN "categoryId" TEXT`)
+      }
+    } catch { /* column may already exist */ }
   } catch { /* ok */ }
 }
