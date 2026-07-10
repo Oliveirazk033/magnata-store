@@ -22,7 +22,7 @@ import Starfield from '@/components/Starfield';
 import {
   Key, Shield, Plus, Trash2, RefreshCw, Coins, ArrowRight,
   Lock, Unlock, History, Copy, Check, Store, BarChart3,
-  Package, BookOpen, X, LayoutDashboard, Hash, User, UserPlus, LogIn, LogOut, Wallet,
+  Package, BookOpen, X, LayoutDashboard, Hash, User, UserPlus, LogIn, LogOut, Wallet, Play,
 } from 'lucide-react';
 
 /* ===== Types ===== */
@@ -46,6 +46,10 @@ interface UserData {
 }
 interface LoggedUser {
   id: string; username: string; displayName: string; credits: number;
+}
+interface TutorialItem {
+  id: string; title: string; url: string; embedUrl: string;
+  sortOrder: number; isActive: boolean; createdAt: string;
 }
 
 /* ===== Main ===== */
@@ -89,6 +93,11 @@ export default function Home() {
   const [editingUser, setEditingUser] = useState<string | null>(null);
   const [editCredits, setEditCredits] = useState('');
 
+  // Tutorials
+  const [tutorials, setTutorials] = useState<TutorialItem[]>([]);
+  const [userTutorials, setUserTutorials] = useState<TutorialItem[]>([]);
+  const [newTutorial, setNewTutorial] = useState({ title: '', url: '' });
+
   const getUserHeaders = () => loggedUser ? ({ 'x-user-id': loggedUser.id }) : {};
   const getAdminHeaders = () => ({ 'x-admin-key': adminPassword });
 
@@ -128,10 +137,30 @@ export default function Home() {
     } catch (err) { const msg = err instanceof Error ? err.message : 'Erro'; toast.error('Fetch users: ' + msg); }
   }, [adminPassword]);
 
-  useEffect(() => { fetchProducts(); }, [fetchProducts]);
+  const fetchTutorials = useCallback(async (isAdminFetch: boolean) => {
+    try {
+      const headers = isAdminFetch ? { 'x-admin-key': adminPassword } : {};
+      const res = await fetch('/api/tutorials', { headers });
+      const data = await res.json();
+      if (data.tutorials) {
+        if (isAdminFetch) setTutorials(data.tutorials);
+        else setUserTutorials(data.tutorials);
+      }
+    } catch { /* silent */ }
+  }, [adminPassword]);
+
+  const fetchUserTutorials = useCallback(async () => {
+    try {
+      const res = await fetch('/api/tutorials');
+      const data = await res.json();
+      if (data.tutorials) setUserTutorials(data.tutorials);
+    } catch { /* silent */ }
+  }, []);
+
+  useEffect(() => { fetchProducts(); fetchUserTutorials(); }, [fetchProducts, fetchUserTutorials]);
   useEffect(() => {
-    if (isAdmin) { fetchTransactions(); fetchKeys(); fetchUsers(); }
-  }, [isAdmin, fetchTransactions, fetchKeys, fetchUsers]);
+    if (isAdmin) { fetchTransactions(); fetchKeys(); fetchUsers(); fetchTutorials(true); }
+  }, [isAdmin, fetchTransactions, fetchKeys, fetchUsers, fetchTutorials]);
 
   // Refresh user credits after login
   const refreshUser = async () => {
@@ -157,15 +186,17 @@ export default function Home() {
         setTimeout(async () => {
           const headers = { 'x-admin-key': adminPassword };
           try {
-            const [tRes, kRes, uRes] = await Promise.all([
+            const [tRes, kRes, uRes, tutRes] = await Promise.all([
               fetch('/api/transactions', { headers }),
               fetch('/api/keys', { headers }),
               fetch('/api/auth/register', { headers }),
+              fetch('/api/tutorials', { headers }),
             ]);
-            const [tData, kData, uData] = await Promise.all([tRes.json(), kRes.json(), uRes.json()]);
+            const [tData, kData, uData, tutData] = await Promise.all([tRes.json(), kRes.json(), uRes.json(), tutRes.json()]);
             if (tData.transactions) { setTransactions(tData.transactions); setStats({ totalCredits: tData.totalCredits, totalSales: tData.totalSales }); }
             if (kData.keys) setKeys(kData.keys);
             if (uData.users) setUsers(uData.users);
+            if (tutData.tutorials) setTutorials(tutData.tutorials);
           } catch (err) { console.error('Admin data fetch error:', err); }
         }, 100);
       }
@@ -235,6 +266,32 @@ export default function Home() {
     } catch (err) { const msg = err instanceof Error ? err.message : 'Erro'; alert('Catch: ' + msg); }
   };
 
+  const handleCreateTutorial = async () => {
+    if (!newTutorial.title.trim() || !newTutorial.url.trim()) { toast.error('Preencha titulo e URL do video'); return; }
+    try {
+      const res = await fetch('/api/tutorials', {
+        method: 'POST', headers: { 'Content-Type': 'application/json', ...getAdminHeaders() },
+        body: JSON.stringify(newTutorial),
+      });
+      const data = await res.json();
+      if (data.tutorial) {
+        toast.success(`Tutorial "${data.tutorial.title}" adicionado!`);
+        setNewTutorial({ title: '', url: '' });
+        fetchTutorials(true);
+      } else { toast.error(data.error || 'Erro ao criar tutorial'); }
+    } catch { toast.error('Erro'); }
+  };
+
+  const handleDeleteTutorial = async (id: string) => {
+    if (!confirm('Remover este tutorial?')) return;
+    try {
+      const res = await fetch(`/api/tutorials?id=${id}`, { method: 'DELETE', headers: getAdminHeaders() });
+      const data = await res.json();
+      if (data.success) { toast.success('Tutorial removido'); fetchTutorials(true); }
+      else toast.error(data.error || 'Erro');
+    } catch { toast.error('Erro'); }
+  };
+
   const handleCreateProduct = async () => {
     if (!newProduct.name || !newProduct.duration || !newProduct.credits) { toast.error('Preencha todos os campos'); return; }
     try {
@@ -297,7 +354,7 @@ export default function Home() {
     ? [
         { group: 'Principal', items: [{ icon: LayoutDashboard, label: 'Dashboard', tab: 'products' }] },
         { group: 'Estoque', items: [{ icon: Key, label: 'Produtos & Keys', tab: 'products' }, { icon: Package, label: 'Estoque', tab: 'stock' }, { icon: History, label: 'Historico', tab: 'sales' }] },
-        { group: 'Sistema', items: [{ icon: User, label: 'Usuarios', tab: 'users' }] },
+        { group: 'Sistema', items: [{ icon: User, label: 'Usuarios', tab: 'users' }, { icon: Play, label: 'Tutoriais', tab: 'tutorials' }] },
       ]
     : [];
 
@@ -461,6 +518,30 @@ export default function Home() {
                   )}
                 </>
               )}
+              {userTutorials.length > 0 && (
+                <div className="mt-8">
+                  <div className="flex items-center gap-3 mb-4">
+                    <Play className="w-5 h-5 text-white/40" />
+                    <h2 className="text-lg font-bold tracking-wider text-white">Tutoriais</h2>
+                  </div>
+                  <div className="space-y-4">
+                    {userTutorials.map((t) => (
+                      <motion.div key={t.id} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }} className="glass rounded-xl overflow-hidden">
+                        <p className="text-sm font-semibold text-white px-5 pt-4 pb-2">{t.title}</p>
+                        <div className="relative w-full" style={{ paddingBottom: '56.25%' }}>
+                          <iframe
+                            src={t.embedUrl}
+                            title={t.title}
+                            className="absolute inset-0 w-full h-full"
+                            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                            allowFullScreen
+                          />
+                        </div>
+                      </motion.div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </motion.div>
           ) : (
             /* ====== ADMIN VIEW ====== */
@@ -485,6 +566,7 @@ export default function Home() {
                     { value: 'stock', icon: Package, label: 'Estoque' },
                     { value: 'sales', icon: History, label: 'Historico' },
                     { value: 'users', icon: User, label: 'Usuarios' },
+                    { value: 'tutorials', icon: Play, label: 'Tutoriais' },
                   ].map((t) => (
                     <TabsTrigger key={t.value} value={t.value} className="data-[state=active]:bg-white/10 data-[state=active]:text-white text-white/40 rounded-lg text-xs tracking-wider gap-1.5">
                       <t.icon className="w-3.5 h-3.5" />{t.label}
@@ -621,6 +703,37 @@ export default function Home() {
                             )}
                             <button onClick={() => handleDeleteUser(u.id)} className="text-white/20 hover:text-red-400 transition-colors p-1"><Trash2 className="w-3.5 h-3.5" /></button>
                           </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </TabsContent>
+
+                {/* Tutorials Tab */}
+                <TabsContent value="tutorials" className="space-y-3 mt-0">
+                  <div className="glass rounded-xl p-5">
+                    <h3 className="text-sm font-semibold tracking-wider text-white mb-4 flex items-center gap-2"><Play className="w-4 h-4 text-white/40" />Adicionar Tutorial</h3>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      <input placeholder="Titulo do video" value={newTutorial.title} onChange={(e) => setNewTutorial({ ...newTutorial, title: e.target.value })} className="glass-input rounded-xl px-4 py-2.5 text-sm text-white placeholder:text-white/20" />
+                      <input placeholder="URL do video (YouTube...)" value={newTutorial.url} onChange={(e) => setNewTutorial({ ...newTutorial, url: e.target.value })} className="glass-input rounded-xl px-4 py-2.5 text-sm text-white placeholder:text-white/20" />
+                      <button onClick={handleCreateTutorial} className="h-10 rounded-xl bg-white text-black text-xs font-medium tracking-wider hover:bg-white/90 transition-colors flex items-center justify-center gap-1.5"><Play className="w-3.5 h-3.5" />ADICIONAR</button>
+                    </div>
+                  </div>
+                  <div className="glass rounded-xl p-5">
+                    <div className="flex items-center justify-between mb-4">
+                      <h3 className="text-sm font-semibold tracking-wider text-white">Tutoriais Cadastrados</h3>
+                      <button onClick={() => fetchTutorials(true)} className="text-white/30 hover:text-white/60 transition-colors"><RefreshCw className="w-3.5 h-3.5" /></button>
+                    </div>
+                    <div className="space-y-3 max-h-[500px] overflow-y-auto custom-scrollbar">
+                      {tutorials.length === 0 ? (
+                        <div className="text-center py-8"><Play className="w-8 h-8 text-white/10 mx-auto mb-2" /><p className="text-sm text-white/20">Nenhum tutorial.</p></div>
+                      ) : tutorials.map((t) => (
+                        <div key={t.id} className="flex items-start justify-between gap-3 p-3 rounded-lg bg-white/[0.02]">
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium text-white">{t.title}</p>
+                            <p className="text-[11px] text-white/30 mt-0.5 truncate">{t.url}</p>
+                          </div>
+                          <button onClick={() => handleDeleteTutorial(t.id)} className="text-white/20 hover:text-red-400 transition-colors p-1 shrink-0"><Trash2 className="w-3.5 h-3.5" /></button>
                         </div>
                       ))}
                     </div>
