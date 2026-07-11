@@ -1,0 +1,99 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme {
+  --color-background: oklch(0.13 0.01 280);
+  --color-foreground: oklch(0.95 0.01 280);
+  --color-card: oklch(0.17 0.015 280);
+  --color-card-foreground: oklch(0.95 0.01 280);
+  --color-popover: oklch(0.17 0.015 280);
+  --color-popover-foreground: oklch(0.95 0.01 280);
+  --color-primary: oklch(0.55 0.22 293);
+  --color-primary-foreground: oklch(0.98 0.005 280);
+  --color-secondary: oklch(0.22 0.02 280);
+  --color-secondary-foreground: oklch(0.90 0.01 280);
+  --color-muted: oklch(0.22 0.02 280);
+  --color-muted-foreground: oklch(0.65 0.02 280);
+  --color-accent: oklch(0.55 0.22 293);
+  --color-accent-foreground: oklch(0.98 0.005 280);
+  --color-destructive: oklch(0.55 0.2 25);
+  --color-destructive-foreground: oklch(0.98 0.005 25);
+  --color-border: oklch(0.28 0.02 280);
+  --color-input: oklch(0.28 0.02 280);
+  --color-ring: oklch(0.55 0.22 293);
+  --radius: 0.75rem;
+  --color-sidebar-background: oklch(0.15 0.01 280);
+  --color-sidebar-foreground: oklch(0.95 0.01 280);
+  --color-sidebar-primary: oklch(0.55 0.22 293);
+  --color-sidebar-primary-foreground: oklch(0.98 0.005 280);
+  --color-sidebar-accent: oklch(0.22 0.02 280);
+  --color-sidebar-accent-foreground: oklch(0.90 0.01 280);
+  --color-sidebar-border: oklch(0.28 0.02 280);
+  --color-sidebar-ring: oklch(0.55 0.22 293);
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  }
+}
+
+@layer utilities {
+  .scrollbar-thin {
+    scrollbar-width: thin;
+    scrollbar-color: oklch(0.35 0.02 280) transparent;
+  }
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  .scrollbar-thin::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    background-color: oklch(0.35 0.02 280);
+    border-radius: 3px;
+  }
+
+  .card-glow {
+    box-shadow: 0 0 0 1px oklch(0.28 0.02 280), 0 4px 24px -4px oklch(0.15 0.08 293);
+    transition: box-shadow 0.3s ease;
+  }
+  .card-glow:hover {
+    box-shadow: 0 0 0 1px oklch(0.45 0.15 293), 0 8px 32px -4px oklch(0.2 0.12 293);
+  }
+
+  .pulse-violet {
+    animation: pulse-violet 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  }
+
+  @keyframes pulse-violet {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.6; }
+  }
+
+  .fade-in {
+    animation: fadeIn 0.3s ease-out;
+  }
+
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .slide-up {
+    animation: slideUp 0.4s ease-out;
+  }
+
+  @keyframes slideUp {
+    from { opacity: 0; transform: translateY(20px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+}

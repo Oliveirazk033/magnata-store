@@ -1,2 +1,15 @@
-skills/
 node_modules/
+.next/
+db/
+.env
+*.log
+.zscripts/
+download/
+upload/
+tool-results/
+scripts/
+skills/
+magnata-key-generator/
+nubank-pix-monitor/
+pix-monitor-fix.py
+store-deploy/
