@@ -1,0 +1,806 @@
+     1→"""
+     2→╔══════════════════════════════════════════════════════════════╗
+     3→║          Nubank PIX Monitor — SaaS Edition v1.0             ║
+     4→║  Monitora Gmail via IMAP, detecta PIX do Nubank             ║
+     5→║  e envia notificações para Discord via Webhook               ║
+     6→╚══════════════════════════════════════════════════════════════╝
+     7→"""
+     8→
+     9→from __future__ import annotations
+    10→
+    11→import json
+    12→import os
+    13→import re
+    14→import sqlite3
+    15→import sys
+    16→import time
+    17→from datetime import datetime, timezone
+    18→from email.header import decode_header
+    19→from email.utils import parsedate_to_datetime
+    20→
+    21→import httpx
+    22→from dotenv import load_dotenv
+    23→from imapclient import IMAPClient
+    24→from mailparser import parse_from_bytes
+    25→from rich.console import Console
+    26→from rich.logging import RichHandler
+    27→from rich.panel import Panel
+    28→from rich.table import Table
+    29→from rich.text import Text
+    30→
+    31→# ──────────────────────────────────────────────────────────────
+    32→#  Configuração inicial
+    33→# ──────────────────────────────────────────────────────────────
+    34→load_dotenv()
+    35→
+    36→console = Console()
+    37→log = console.log
+    38→
+    39→# Configuração do logging com Rich
+    40→import logging
+    41→
+    42→logging.basicConfig(
+    43→    level=logging.INFO,
+    44→    format="%(message)s",
+    45→    datefmt="[%X]",
+    46→    handlers=[RichHandler(console=console, rich_tracebacks=True)],
+    47→)
+    48→logger = logging.getLogger("pix-monitor")
+    49→
+    50→# ──────────────────────────────────────────────────────────────
+    51→#  Variáveis de ambiente
+    52→# ──────────────────────────────────────────────────────────────
+    53→GMAIL_EMAIL: str = os.getenv("GMAIL_EMAIL", "")
+    54→GMAIL_APP_PASSWORD: str = os.getenv("GMAIL_APP_PASSWORD", "")
+    55→DISCORD_WEBHOOK_URL: str = os.getenv("DISCORD_WEBHOOK_URL", "")
+    56→CHECK_INTERVAL: int = int(os.getenv("CHECK_INTERVAL", "30"))
+    57→DB_PATH: str = os.getenv("DB_PATH", "processed_emails.db")
+    58→BOT_NAME: str = os.getenv("BOT_NAME", "Nubank PIX Monitor")
+    59→BOT_AVATAR_URL: str = os.getenv("BOT_AVATAR_URL", "")
+    60→
+    61→# ── Integração com o site (auto-aprovação) ──
+    62→SITE_WEBHOOK_URL: str = os.getenv("SITE_WEBHOOK_URL", "")
+    63→SITE_WEBHOOK_SECRET: str = os.getenv("SITE_WEBHOOK_SECRET", "")
+    64→
+    65→
+    66→# ──────────────────────────────────────────────────────────────
+    67→#  Validação de configuração
+    68→# ──────────────────────────────────────────────────────────────
+    69→def validate_config() -> None:
+    70→    """Valida se todas as variáveis obrigatórias estão preenchidas."""
+    71→    erros: list[str] = []
+    72→
+    73→    if not GMAIL_EMAIL or GMAIL_EMAIL == "seu_email_aqui@gmail.com":
+    74→        erros.append("  [!] GMAIL_EMAIL não configurado no .env")
+    75→    if not GMAIL_APP_PASSWORD or GMAIL_APP_PASSWORD == "sua_senha_de_app_aqui":
+    76→        erros.append("  [!] GMAIL_APP_PASSWORD não configurado no .env")
+    77→    if not DISCORD_WEBHOOK_URL or "SEU_WEBHOOK_AQUI" in DISCORD_WEBHOOK_URL:
+    78→        erros.append("  [!] DISCORD_WEBHOOK_URL não configurado no .env")
+    79→    if not SITE_WEBHOOK_URL or "SEU_SITE_AQUI" in SITE_WEBHOOK_URL:
+    80→        erros.append("  [!] SITE_WEBHOOK_URL não configurado no .env")
+    81→    if not SITE_WEBHOOK_SECRET or "SEU_SECRET_AQUI" in SITE_WEBHOOK_SECRET:
+    82→        erros.append("  [!] SITE_WEBHOOK_SECRET não configurado no .env")
+    83→
+    84→    if erros:
+    85→        console.print("\n[bold red]✘ ERRO DE CONFIGURAÇÃO — Preencha o arquivo .env:[/bold red]\n")
+    86→        for e in erros:
+    87→            console.print(f"  [red]{e}[/red]")
+    88→        console.print(
+    89→            '\n  Copie [cyan].env.example[/cyan] para [cyan].env[/cyan] e preencha os valores.\n'
+    90→        )
+    91→        sys.exit(1)
+    92→
+    93→
+    94→validate_config()
+    95→
+    96→
+    97→# ──────────────────────────────────────────────────────────────
+    98→#  Banco de dados SQLite — Prevenção de duplicatas
+    99→# ──────────────────────────────────────────────────────────────
+   100→class EmailDatabase:
+   101→    """Gerencia o banco SQLite para rastrear e-mails já processados."""
+   102→
+   103→    def __init__(self, db_path: str) -> None:
+   104→        self.db_path = db_path
+   105→        self._init_db()
+   106→
+   107→    def _init_db(self) -> None:
+   108→        """Cria a tabela se não existir."""
+   109→        with sqlite3.connect(self.db_path) as conn:
+   110→            conn.execute("""
+   111→                CREATE TABLE IF NOT EXISTS processed_emails (
+   112→                    message_id   TEXT PRIMARY KEY,
+   113→                    subject      TEXT,
+   114→                    amount       REAL,
+   115→                    sender       TEXT,
+   116→                    description  TEXT,
+   117→                    processed_at TEXT NOT NULL
+   118→                )
+   119→            """)
+   120→            conn.execute("""
+   121→                CREATE INDEX IF NOT EXISTS idx_processed_at
+   122→                ON processed_emails(processed_at)
+   123→            """)
+   124→            conn.commit()
+   125→        logger.info(f"Banco SQLite inicializado: [cyan]{self.db_path}[/cyan]")
+   126→
+   127→    def is_processed(self, message_id: str) -> bool:
+   128→        """Verifica se um e-mail já foi processado."""
+   129→        with sqlite3.connect(self.db_path) as conn:
+   130→            row = conn.execute(
+   131→                "SELECT 1 FROM processed_emails WHERE message_id = ?",
+   132→                (message_id,),
+   133→            ).fetchone()
+   134→            return row is not None
+   135→
+   136→    def mark_processed(
+   137→        self,
+   138→        message_id: str,
+   139→        subject: str,
+   140→        amount: float,
+   141→        sender: str,
+   142→        description: str,
+   143→    ) -> None:
+   144→        """Marca um e-mail como processado."""
+   145→        now = datetime.now(timezone.utc).isoformat()
+   146→        with sqlite3.connect(self.db_path) as conn:
+   147→            conn.execute(
+   148→                """INSERT OR IGNORE INTO processed_emails
+   149→                   (message_id, subject, amount, sender, description, processed_at)
+   150→                   VALUES (?, ?, ?, ?, ?, ?)""",
+   151→                (message_id, subject, amount, sender, description, now),
+   152→            )
+   153→            conn.commit()
+   154→
+   155→    def get_stats(self) -> dict:
+   156→        """Retorna estatísticas do banco."""
+   157→        with sqlite3.connect(self.db_path) as conn:
+   158→            total = conn.execute("SELECT COUNT(*) FROM processed_emails").fetchone()[0]
+   159→            total_amount = conn.execute(
+   160→                "SELECT COALESCE(SUM(amount), 0) FROM processed_emails"
+   161→            ).fetchone()[0]
+   162→        return {"total": total, "total_amount": total_amount}
+   163→
+   164→
+   165→db = EmailDatabase(DB_PATH)
+   166→
+   167→
+   168→# ──────────────────────────────────────────────────────────────
+   169→#  Parser de e-mails do Nubank
+   170→# ──────────────────────────────────────────────────────────────
+   171→def extract_text_from_email(raw_email: bytes) -> str:
+   172→    """Extrai todo o texto visível do e-mail (HTML + texto puro)."""
+   173→    try:
+   174→        mail = parse_from_bytes(raw_email)
+   175→        parts: list[str] = []
+   176→
+   177→        # Texto puro
+   178→        if mail.text_plain:
+   179→            for part in mail.text_plain:
+   180→                parts.append(part)
+   181→
+   182→        # Texto do HTML (strip tags)
+   183→        if mail.text_html:
+   184→            for html_part in mail.text_html:
+   185→                text = re.sub(r"<[^>]+>", " ", html_part)
+   186→                text = re.sub(r"\s+", " ", text).strip()
+   187→                parts.append(text)
+   188→
+   189→        return " ".join(parts)
+   190→    except Exception as e:
+   191→        logger.warning(f"Falha ao parsear e-mail: {e}")
+   192→        return ""
+   193→
+   194→
+   195→def decode_subject(subject_raw: str | None) -> str:
+   196→    """Decodifica o assunto do e-mail."""
+   197→    if not subject_raw:
+   198→        return ""
+   199→    try:
+   200→        parts = decode_header(subject_raw)
+   201→        decoded = []
+   202→        for data, charset in parts:
+   203→            if isinstance(data, bytes):
+   204→                decoded.append(data.decode(charset or "utf-8", errors="replace"))
+   205→            else:
+   206→                decoded.append(data)
+   207→        return " ".join(decoded)
+   208→    except Exception:
+   209→        return subject_raw
+   210→
+   211→
+   212→def is_nubank_pix_email(subject: str, from_addr: str) -> bool:
+   213→    """Verifica se o e-mail é uma notificação de PIX do Nubank."""
+   214→    subject_lower = subject.lower()
+   215→    from_lower = from_addr.lower()
+   216→
+   217→    # Padrões conhecidos do Nubank para PIX
+   218→    nubank_patterns = [
+   219→        "nubank" in from_lower,
+   220→        "contato@nubank.com.br" in from_lower,
+   221→        "pix recebido" in subject_lower,
+   222→        "voce recebeu um pix" in subject_lower,
+   223→        "recebemos um pix" in subject_lower,
+   224→        "pix" in subject_lower and "receb" in subject_lower,
+   225→    ]
+   226→
+   227→    return any(nubank_patterns)
+   228→
+   229→
+   230→def extract_pix_data(email_text: str) -> dict | None:
+   231→    """
+   232→    Extrai dados do PIX a partir do corpo do e-mail.
+   233→    Retorna dict com amount, sender, description ou None.
+   234→    """
+   235→    if not email_text:
+   236→        return None
+   237→
+   238→    data: dict = {"amount": 0.0, "sender": "Desconhecido", "description": ""}
+   239→
+   240→    # ── Valor do PIX ──
+   241→    # Padrões comuns: R$ 100,00 / R$100,00 / R$ 1.234,56 / R$50,00
+   242→    amount_patterns = [
+   243→        r"R\$\s*(\d{1,3}(?:\.\d{3})*,\d{2})",  # R$ 1.234,56
+   244→        r"R\$\s*(\d+,\d{2})",                    # R$ 50,00
+   245→        r"valor[:\s]+R\$\s*(\d{1,3}(?:\.\d{3})*,\d{2})",
+   246→        r"recebeu\s+R\$\s*(\d{1,3}(?:\.\d{3})*,\d{2})",
+   247→    ]
+   248→
+   249→    for pattern in amount_patterns:
+   250→        match = re.search(pattern, email_text, re.IGNORECASE)
+   251→        if match:
+   252→            valor_str = match.group(1).replace(".", "").replace(",", ".")
+   253→            try:
+   254→                data["amount"] = float(valor_str)
+   255→                break
+   256→            except ValueError:
+   257→                continue
+   258→
+   259→    # ── Nome de quem enviou ──
+   260→    sender_patterns = [
+   261→        r"de\s+([A-ZÀ-Ú][a-zà-ú]+(?:\s+[A-ZÀ-Ú][a-zà-ú]+)+)",
+   262→        r"enviada\s+por\s+([A-ZÀ-Ú][a-zà-ú]+(?:\s+[A-ZÀ-Ú][a-zà-ú]+)+)",
+   263→        r"quem\s+enviou[:\s]+([A-ZÀ-Ú][a-zà-ú]+(?:\s+[A-ZÀ-Ú][a-zà-ú]+)+)",
+   264→        r"recebido\s+de\s+([A-ZÀ-Ú][a-zà-ú]+(?:\s+[A-ZÀ-Ú][a-zà-ú]+)+)",
+   265→        r"remetente[:\s]+([A-ZÀ-Ú][a-zà-ú]+(?:\s+[A-ZÀ-Ú][a-zà-ú]+)+)",
+   266→    ]
+   267→
+   268→    for pattern in sender_patterns:
+   269→        match = re.search(pattern, email_text, re.IGNORECASE)
+   270→        if match:
+   271→            name = match.group(1).strip()
+   272→            # Filtra nomes que são claramente parte do layout
+   273→            stop_words = {"nubank", "pix", "valor", "recebido", "enviado", "conta"}
+   274→            words = name.split()
+   275→            if not any(w.lower() in stop_words for w in words) and len(words) >= 2:
+   276→                data["sender"] = name
+   277→                break
+   278→
+   279→    # ── Descrição / ID da transação ──
+   280→    desc_patterns = [
+   281→        r"descri(?:ç|c)(?:ã|a)o[:\s]+(.{2,80}?)(?:\n|$)",
+   282→        r"identificad(?:o|or)[:\s]+([A-Za-z0-9_-]{5,50})",
+   283→        r"ref[:\s]+([A-Za-z0-9_.-]{5,50})",
+   284→        r"mensagem[:\s]+(.{2,80}?)(?:\n|$)",
+   285→    ]
+   286→
+   287→    for pattern in desc_patterns:
+   288→        match = re.search(pattern, email_text, re.IGNORECASE)
+   289→        if match:
+   290→            desc = match.group(1).strip()
+   291→            if len(desc) >= 2:
+   292→                data["description"] = desc
+   293→                break
+   294→
+   295→    # Só retorna se encontrou pelo menos o valor
+   296→    if data["amount"] > 0:
+   297→        return data
+   298→    return None
+   299→
+   300→
+   301→# ──────────────────────────────────────────────────────────────
+   302→#  Notificação Discord via Webhook
+   303→# ──────────────────────────────────────────────────────────────
+   304→def send_discord_notification(pix_data: dict, subject: str) -> bool:
+   305→    """
+   306→    Envia notificação para o Discord via Webhook com embed profissional.
+   307→    Retorna True se enviado com sucesso.
+   308→    """
+   309→    amount_str = f"R$ {pix_data['amount']:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+   310→    sender = pix_data.get("sender", "Desconhecido")
+   311→    description = pix_data.get("description", "Sem descrição")
+   312→    now = datetime.now(timezone.utc).strftime("%d/%m/%Y %H:%M UTC")
+   313→
+   314→    embed = {
+   315→        "title": "💰 PIX Recebido!",
+   316→        "description": f"**{subject}**",
+   317→        "color": 0x8A05BE,  # Roxo Nubank
+   318→        "fields": [
+   319→            {
+   320→                "name": "💵 Valor",
+   321→                "value": f"```{amount_str}```",
+   322→                "inline": True,
+   323→            },
+   324→            {
+   325→                "name": "👤 Quem enviou",
+   326→                "value": f"**{sender}**",
+   327→                "inline": True,
+   328→            },
+   329→            {
+   330→                "name": "📝 Descrição",
+   331→                "value": description if description else "—",
+   332→                "inline": False,
+   333→            },
+   334→            {
+   335→                "name": "🕐 Detectado em",
+   336→                "value": now,
+   337→                "inline": True,
+   338→            },
+   339→        ],
+   340→        "footer": {
+   341→            "text": f"{BOT_NAME} • Auto-detectado via IMAP",
+   342→            "icon_url": "https://logodownload.org/wp-content/uploads/2021/03/nubank-logo-3.png",
+   343→        },
+   344→        "thumbnail": {
+   345→            "url": "https://logodownload.org/wp-content/uploads/2021/03/nubank-logo-3.png"
+   346→        },
+   347→        "timestamp": datetime.now(timezone.utc).isoformat(),
+   348→    }
+   349→
+   350→    payload: dict = {
+   351→        "username": BOT_NAME,
+   352→        "embeds": [embed],
+   353→    }
+   354→    if BOT_AVATAR_URL:
+   355→        payload["avatar_url"] = BOT_AVATAR_URL
+   356→
+   357→    try:
+   358→        response = httpx.post(
+   359→            DISCORD_WEBHOOK_URL,
+   360→            json=payload,
+   361→            timeout=15.0,
+   362→        )
+   363→        if response.status_code == 204:
+   364→            logger.info("[bold green]✓ Notificação enviada para o Discord[/bold green]")
+   365→            return True
+   366→        else:
+   367→            logger.error(
+   368→                f"[red]✘ Discord retornou status {response.status_code}: "
+   369→                f"{response.text[:200]}[/red]"
+   370→            )
+   371→            return False
+   372→    except httpx.TimeoutException:
+   373→        logger.error("[red]✘ Timeout ao enviar para o Discord[/red]")
+   374→        return False
+   375→    except Exception as e:
+   376→        logger.error(f"[red]✘ Erro ao enviar para o Discord: {e}[/red]")
+   377→        return False
+   378→
+   379→
+   380→# ──────────────────────────────────────────────────────────────
+   381→#  Integração com o site — Auto-aprovação de pedidos
+   382→# ──────────────────────────────────────────────────────────────
+   383→def approve_order_on_site(pix_data: dict, message_id: str) -> dict | None:
+   384→    """
+   385→    Envia os dados do PIX para o site aprovar o pedido automaticamente.
+   386→    Retorna a resposta da API ou None em caso de erro.
+   387→    """
+   388→    if not SITE_WEBHOOK_URL or not SITE_WEBHOOK_SECRET:
+   389→        logger.warning("[yellow]⚠ Site webhook não configurado, pulando auto-aprovação[/yellow]")
+   390→        return None
+   391→
+   392→    try:
+   393→        response = httpx.post(
+   394→            SITE_WEBHOOK_URL,
+   395→            json={
+   396→                "amount": pix_data["amount"],
+   397→                "sender": pix_data["sender"],
+   398→                "description": pix_data["description"],
+   399→                "messageId": message_id,
+   400→            },
+   401→            headers={
+   402→                "x-webhook-secret": SITE_WEBHOOK_SECRET,
+   403→                "Content-Type": "application/json",
+   404→            },
+   405→            timeout=20.0,
+   406→        )
+   407→
+   408→        data = response.json()
+   409→
+   410→        if response.status_code == 200 and data.get("success"):
+   411→            logger.info(
+   412→                f"[bold green]✅ Pedido {data.get('orderId', '?')[:8]}... auto-aprovado! "
+   413→                f"{data.get('credits', '?')} creditos para {data.get('buyerName', '?')}[/bold green]"
+   414→            )
+   415→            return data
+   416→        elif response.status_code == 404:
+   417→            logger.warning(
+   418→                f"[yellow]⚠ Nenhum pedido pendente para R$ {pix_data['amount']:.2f} "
+   419→                f"— {data.get('message', 'sem correspondência')}[/yellow]"
+   420→            )
+   421→            return data
+   422→        else:
+   423→            logger.error(
+   424→                f"[red]✘ Site retornou status {response.status_code}: "
+   425→                f"{data.get('error', response.text[:150])}[/red]"
+   426→            )
+   427→            return data
+   428→
+   429→    except httpx.TimeoutException:
+   430→        logger.error("[red]✘ Timeout ao contactar o site[/red]")
+   431→        return None
+   432→    except Exception as e:
+   433→        logger.error(f"[red]✘ Erro ao contactar o site: {e}[/red]")
+   434→        return None
+   435→
+   436→
+   437→# ──────────────────────────────────────────────────────────────
+   438→#  Callback — chamado quando um PIX é detectado
+   439→# ──────────────────────────────────────────────────────────────
+   440→def on_pix_received(pix_data: dict, subject: str, message_id: str) -> None:
+   441→    """
+   442→    Callback chamado automaticamente quando um PIX é detectado.
+   443→    1. Loga no terminal com tabela Rich
+   444→    2. Envia notificação para o Discord
+   445→    3. Auto-aprova o pedido no site
+   446→
+   447→    Args:
+   448→        pix_data: Dicionário com 'amount', 'sender', 'description'
+   449→        subject: Assunto do e-mail
+   450→        message_id: ID único do e-mail no Gmail
+   451→    """
+   452→    # ── 1. Log formatado no terminal ──
+   453→    amount_str = f"R$ {pix_data['amount']:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+   454→
+   455→    table = Table(
+   456→        title="🔔 NOVO PIX DETECTADO",
+   457→        border_style="bold magenta",
+   458→        title_style="bold magenta",
+   459→        show_header=False,
+   460→        padding=(0, 2),
+   461→    )
+   462→    table.add_column("Campo", style="bold cyan", width=16)
+   463→    table.add_column("Valor", style="bold white")
+   464→    table.add_row("Valor", f"[bold green]{amount_str}[/bold green]")
+   465→    table.add_row("Remetente", f"[yellow]{pix_data['sender']}[/yellow]")
+   466→    table.add_row("Descrição", pix_data["description"] or "[dim]—[/dim]")
+   467→    table.add_row("Assunto", subject[:80])
+   468→    table.add_row("Message ID", f"[dim]{message_id[:50]}...[/dim]")
+   469→    console.print(table)
+   470→    console.print()
+   471→
+   472→    # ── 2. Envia notificação para o Discord ──
+   473→    send_discord_notification(pix_data, subject)
+   474→
+   475→    # ── 3. Auto-aprova pedido no site ──
+   476→    site_result = approve_order_on_site(pix_data, message_id)
+   477→    if site_result and site_result.get("success"):
+   478→        # Envia segundo embed no Discord confirmando a aprovação
+   479→        send_discord_approval_confirmation(site_result, pix_data)
+   480→
+   481→
+   482→def send_discord_approval_confirmation(site_result: dict, pix_data: dict) -> bool:
+   483→    """Envia embed de confirmação de aprovação automática no Discord."""
+   484→    amount_str = f"R$ {pix_data['amount']:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+   485→
+   486→    embed = {
+   487→        "title": "✅ Créditos Aprovados Automaticamente!",
+   488→        "description": f"O pedido foi encontrado e os créditos já foram adicionados.",
+   489→        "color": 0x57F287,  # Verde
+   490→        "fields": [
+   491→            {"name": "👤 Cliente", "value": f"**{site_result.get('buyerName', '?')}**", "inline": True},
+   492→            {"name": "💰 Valor", "value": f"```{amount_str}```", "inline": True},
+   493→            {"name": "🪙 Créditos", "value": f"**+{site_result.get('credits', '?')} creditos**", "inline": True},
+   494→            {"name": "📋 Pedido", "value": f"`{site_result.get('orderId', '?')[:12]}...`", "inline": True},
+   495→        ],
+   496→        "footer": {"text": f"{BOT_NAME} • Auto-aprovação via PIX"},
+   497→        "timestamp": datetime.now(timezone.utc).isoformat(),
+   498→    }
+   499→
+   500→    payload: dict = {"username": BOT_NAME, "embeds": [embed]}
+   501→    if BOT_AVATAR_URL:
+   502→        payload["avatar_url"] = BOT_AVATAR_URL
+   503→
+   504→    try:
+   505→        response = httpx.post(DISCORD_WEBHOOK_URL, json=payload, timeout=15.0)
+   506→        return response.status_code == 204
+   507→    except Exception:
+   508→        return False
+   509→
+   510→
+   511→# ──────────────────────────────────────────────────────────────
+   512→#  Monitor IMAP — Conexão e busca de e-mails
+   513→# ──────────────────────────────────────────────────────────────
+   514→class IMAPMonitor:
+   515→    """Monitor de IMAP com auto-reconexão e tratamento de erros."""
+   516→
+   517→    def __init__(self) -> None:
+   518→        self.client: IMAPClient | None = None
+   519→        self._retry_count = 0
+   520→        self._max_retries = 10
+   521→        self._base_delay = 5  # segundos
+   522→
+   523→    def connect(self) -> bool:
+   524→        """Conecta ao Gmail via IMAP com SSL."""
+   525→        try:
+   526→            self.client = IMAPClient(
+   527→                "imap.gmail.com",
+   528→                ssl=True,
+   529→                timeout=30,
+   530→            )
+   531→            self.client.login(GMAIL_EMAIL, GMAIL_APP_PASSWORD)
+   532→            self.client.select_folder("INBOX")
+   533→            self._retry_count = 0
+   534→            logger.info("[bold green]✓ Conectado ao Gmail IMAP com sucesso[/bold green]")
+   535→            return True
+   536→        except IMAPClient.Error as e:
+   537→            logger.error(f"[red]✘ Erro de autenticação IMAP: {e}[/red]")
+   538→            logger.error(
+   539→                "[yellow]  → Verifique se a Senha de App está correta[/yellow]"
+   540→            )
+   541→            logger.error(
+   542→                "[yellow]  → Ative 2FA no Google e crie uma Senha de App em:[/yellow]"
+   543→            )
+   544→            logger.error(
+   545→                "[yellow]  → https://myaccount.google.com/apppasswords[/yellow]"
+   546→            )
+   547→            return False
+   548→        except Exception as e:
+   549→            logger.error(f"[red]✘ Erro ao conectar IMAP: {e}[/red]")
+   550→            return False
+   551→
+   552→    def disconnect(self) -> None:
+   553→        """Desconecta do IMAP com segurança."""
+   554→        try:
+   555→            if self.client:
+   556→                self.client.logout()
+   557→                logger.info("Desconectado do IMAP")
+   558→        except Exception:
+   559→            pass
+   560→        finally:
+   561→            self.client = None
+   562→
+   563→    def _backoff_delay(self) -> float:
+   564→        """Calcula delay exponencial para retry com jitter."""
+   565→        delay = min(self._base_delay * (2 ** self._retry_count), 300)
+   566→        jitter = delay * 0.1 * (hash(str(time.time())) % 10)
+   567→        return delay + jitter
+   568→
+   569→    def check_new_emails(self) -> int:
+   570→        """
+   571→        Busca e-mails não lidos do Nubank sobre PIX.
+   572→        Retorna quantos novos PIXs foram processados.
+   573→        """
+   574→        if not self.client:
+   575→            return 0
+   576→
+   577→        try:
+   578→            # Busca e-mails do Nubank sobre PIX (busca todos, DB evita duplicatas)
+   579→            self.client.select_folder("INBOX")
+   580→            messages = self.client.search(
+   581→                ["FROM", "nubank", "SUBJECT", "PIX"]
+   582→            )
+   583→
+   584→            if not messages:
+   585→                return 0
+   586→
+   587→            pix_count = 0
+   588→            logger.info(
+   589→                f"[cyan]📧 Encontrados {len(messages)} e-mail(s) não lido(s) "
+   590→                f"do Nubank sobre PIX[/cyan]"
+   591→            )
+   592→
+   593→            for msg_id in messages:
+   594→                try:
+   595→                    response = self.client.fetch([msg_id], ["BODY.PEEK[]", "ENVELOPE"])
+   596→                    if msg_id not in response:
+   597→                        continue
+   598→
+   599→                    msg_data = response[msg_id]
+   600→                    raw_email = msg_data[b"BODY[]"]
+   601→                    envelope = msg_data[b"ENVELOPE"]
+   602→
+   603→                    # Extrai message ID
+   604→                    message_id_str = envelope.message_id.decode() if envelope.message_id else f"manual-{msg_id}"
+   605→
+   606→                    # Decodifica assunto
+   607→                    subject = decode_subject(
+   608→                        envelope.subject.decode() if envelope.subject else ""
+   609→                    )
+   610→
+   611→                    # Extrai remetente
+   612→                    from_addr = ""
+   613→                    if envelope.from_:
+   614→                        addr = envelope.from_[0]
+   615→                        # imapclient 3.x: Address object com .mailbox e .host
+   616→                        if hasattr(addr, 'mailbox') and hasattr(addr, 'host'):
+   617→                            from_addr = f"{addr.mailbox}@{addr.host}" if addr.mailbox else ""
+   618→                        else:
+   619→                            # imapclient 2.x: tuple (name, email_bytes)
+   620→                            from_name, from_email = addr
+   621→                            from_addr = from_email.decode() if from_email else ""
+   622→
+   623→                    # Verifica duplicata
+   624→                    if db.is_processed(message_id_str):
+   625→                        logger.debug(f"[dim]  ↳ Duplicata ignorada: {message_id_str[:40]}...[/dim]")
+   626→                        continue
+   627→
+   628→                    # Verifica se é e-mail de PIX do Nubank
+   629→                    if not is_nubank_pix_email(subject, from_addr):
+   630→                        logger.debug(f"[dim]  ↳ Não é PIX do Nubank: {subject[:50]}[/dim]")
+   631→                        continue
+   632→
+   633→                    # Extrai texto do e-mail
+   634→                    email_text = extract_text_from_email(raw_email)
+   635→
+   636→                    # Extrai dados do PIX
+   637→                    pix_data = extract_pix_data(email_text)
+   638→                    if pix_data is None:
+   639→                        logger.warning(
+   640→                            f"[yellow]  ⚠ E-mail de PIX mas não conseguiu "
+   641→                            f"extrair valor: {subject[:60]}[/yellow]"
+   642→                        )
+   643→                        # Marca como processado mesmo assim para não reprocessar
+   644→                        db.mark_processed(message_id_str, subject, 0, "N/A", "Parse falhou")
+   645→                        continue
+   646→
+   647→                    # Marca como processado
+   648→                    db.mark_processed(
+   649→                        message_id_str,
+   650→                        subject,
+   651→                        pix_data["amount"],
+   652→                        pix_data["sender"],
+   653→                        pix_data["description"],
+   654→                    )
+   655→
+   656→                    # Chama callback
+   657→                    on_pix_received(pix_data, subject, message_id_str)
+   658→                    pix_count += 1
+   659→
+   660→                except Exception as e:
+   661→                    logger.error(f"[red]  ✘ Erro ao processar e-mail {msg_id}: {e}[/red]")
+   662→                    continue
+   663→
+   664→            return pix_count
+   665→
+   666→        except IMAPClient.Error as e:
+   667→            logger.error(f"[red]✘ Erro IMAP durante busca: {e}[/red]")
+   668→            self.disconnect()
+   669→            return -1  # Sinaliza que precisa reconectar
+   670→        except Exception as e:
+   671→            logger.error(f"[red]✘ Erro inesperado durante busca: {e}[/red]")
+   672→            return -1
+   673→
+   674→    def run(self) -> None:
+   675→        """Loop principal de monitoramento com auto-reconexão."""
+   676→        console.print(
+   677→            Panel(
+   678→                Text(
+   679→                    f"  🏦 Nubank PIX Monitor v1.0\n"
+   680→                    f"  📧 Conta: [cyan]{GMAIL_EMAIL}[/cyan]\n"
+   681→                    f"  ⏱  Intervalo: [yellow]{CHECK_INTERVAL}s[/yellow]\n"
+   682→                    f"  🗄  SQLite: [green]{DB_PATH}[/green]",
+   683→                    style="white",
+   684→                ),
+   685→                title="[bold magenta]Nubank PIX Monitor[/bold magenta]",
+   686→                border_style="bold magenta",
+   687→                padding=(1, 2),
+   688→            )
+   689→        )
+   690→        console.print()
+   691→
+   692→        while True:
+   693→            # Conecta se necessário
+   694→            if not self.client:
+   695→                if not self.connect():
+   696→                    delay = self._backoff_delay()
+   697→                    self._retry_count += 1
+   698→                    logger.warning(
+   699→                        f"[yellow]⏳ Tentando reconectar em {delay:.0f}s "
+   700→                        f"(tentativa {self._retry_count}/{self._max_retries})...[/yellow]"
+   701→                    )
+   702→                    time.sleep(delay)
+   703→                    if self._retry_count >= self._max_retries:
+   704→                        logger.error(
+   705→                            "[bold red]✘ Máximo de tentativas atingido. "
+   706→                            "Aguardando 5 minutos antes de recomeçar...[/bold red]"
+   707→                        )
+   708→                        self._retry_count = 0
+   709→                        time.sleep(300)
+   710→                    continue
+   711→
+   712→            # Verifica novos e-mails
+   713→            result = self.check_new_emails()
+   714→
+   715→            if result == -1:
+   716→                # Precisa reconectar
+   717→                delay = self._backoff_delay()
+   718→                self._retry_count += 1
+   719→                logger.warning(
+   720→                    f"[yellow]⏳ Reconectando em {delay:.0f}s...[/yellow]"
+   721→                )
+   722→                time.sleep(delay)
+   723→                continue
+   724→
+   725→            if result > 0:
+   726→                stats = db.get_stats()
+   727→                logger.info(
+   728→                    f"[bold green]📊 Total processado: {stats['total']} PIXs | "
+   729→                    f"Total recebido: R$ {stats['total_amount']:,.2f}[/bold green]"
+   730→                )
+   731→
+   732→            # Aguarda próximo ciclo
+   733→            time.sleep(CHECK_INTERVAL)
+   734→
+   735→
+   736→# ──────────────────────────────────────────────────────────────
+   737→#  Ponto de entrada
+   738→# ──────────────────────────────────────────────────────────────
+   739→def run_once() -> int:
+   740→    """Conecta, checa uma vez e desconecta. Retorna quantidade de PIXs encontrados."""
+   741→    logger.info("[cyan]🔍 Iniciando verificação única...[/cyan]")
+   742→    monitor = IMAPMonitor()
+   743→    if not monitor.connect():
+   744→        return 0
+   745→    try:
+   746→        result = monitor.check_new_emails()
+   747→        if result == -1:
+   748→            logger.warning("[yellow]⚠ Erro na checagem, tentando reconectar...[/yellow]")
+   749→            if monitor.connect():
+   750→                result = monitor.check_new_emails()
+   751→        count = max(result, 0)
+   752→        if count == 0:
+   753→            logger.info("[dim]  Nenhum novo PIX encontrado.[/dim]")
+   754→        return count
+   755→    finally:
+   756→        monitor.disconnect()
+   757→
+   758→
+   759→def main() -> None:
+   760→    """Inicia o monitor de PIX."""
+   761→    once_mode = "--once" in sys.argv
+   762→
+   763→    console.print()
+   764→    console.print(
+   765→        "[bold magenta]╔══════════════════════════════════════════════════════════════╗[/bold magenta]"
+   766→    )
+   767→    console.print(
+   768→        "[bold magenta]║          Nubank PIX Monitor — SaaS Edition v1.0             ║[/bold magenta]"
+   769→    )
+   770→    console.print(
+   771→        "[bold magenta]║  Monitora Gmail via IMAP, detecta PIX do Nubank             ║[/bold magenta]"
+   772→    )
+   773→    console.print(
+   774→        "[bold magenta]║  e envia notificações para Discord via Webhook               ║[/bold magenta]"
+   775→    )
+   776→    console.print(
+   777→        "[bold magenta]╚══════════════════════════════════════════════════════════════╝[/bold magenta]"
+   778→    )
+   779→    console.print()
+   780→
+   781→    # Modo --once: checa uma vez e sai (usado pelo GitHub Actions)
+   782→    if once_mode:
+   783→        logger.info("[bold cyan]⚡ Modo --once: verificação única (GitHub Actions)[/bold cyan]")
+   784→        count = run_once()
+   785→        logger.info(f"[bold green]✓ Verificação concluída — {count} PIX(s) processado(s)[/bold green]")
+   786→        return
+   787→
+   788→    # Tratamento de encerramento gracioso (Ctrl+C)
+   789→    try:
+   790→        monitor = IMAPMonitor()
+   791→        monitor.run()
+   792→    except KeyboardInterrupt:
+   793→        console.print("\n[bold yellow]⏹ Monitor encerrado pelo usuário (Ctrl+C)[/bold yellow]")
+   794→        monitor.disconnect()
+   795→        stats = db.get_stats()
+   796→        logger.info(
+   797→            f"[cyan]📊 Sessão finalizada — {stats['total']} PIXs processados, "
+   798→            f"R$ {stats['total_amount']:,.2f} detectados no total[/cyan]"
+   799→        )
+   800→    except Exception as e:
+   801→        logger.error(f"[bold red]✘ Erro fatal: {e}[/bold red]")
+   802→        raise
+   803→
+   804→
+   805→if __name__ == "__main__":
+   806→    main()
