@@ -2,10 +2,18 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { createToken, getSessionCookieName } from '@/lib/auth'
 
+function getAppUrl(request: NextRequest): string {
+  const envUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.APP_URL
+  if (envUrl) return envUrl
+  const host = request.headers.get('x-forwarded-host') || request.headers.get('host') || 'localhost:3000'
+  const proto = request.headers.get('x-forwarded-proto') || 'http'
+  return `${proto}://${host}`
+}
+
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url)
   const code = searchParams.get('code')
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.APP_URL || 'http://localhost:3000'
+  const appUrl = getAppUrl(request)
 
   if (!code) {
     return NextResponse.redirect(`${appUrl}/?error=no_code`)
