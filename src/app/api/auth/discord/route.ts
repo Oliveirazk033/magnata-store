@@ -1,8 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 
 function getAppUrl(request: NextRequest): string {
-  const envUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.APP_URL
-  if (envUrl) return envUrl
   const host = request.headers.get('x-forwarded-host') || request.headers.get('host') || 'localhost:3000'
   const proto = request.headers.get('x-forwarded-proto') || 'http'
   return `${proto}://${host}`
